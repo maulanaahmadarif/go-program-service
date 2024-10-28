@@ -12,7 +12,7 @@ export const uploadFile = (req: Request, res: Response) => {
     // Respond with success and file info
     res.json({
       message: 'File uploaded successfully',
-      filePath: `/public/uploads/${req.file.filename}`, // Public file path
+      filePath: `${req.file.filename}`, // Public file path
     });
   } catch (error) {
     console.error('Error handling upload:', error);

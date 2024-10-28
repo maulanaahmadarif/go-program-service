@@ -4,7 +4,7 @@ import path from 'path';
 // Configure storage settings
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../../public')); // Destination folder
+    cb(null, path.join(process.cwd(), 'public'));
   },
   filename: (req, file, cb) => {
     // Generate a unique filename
