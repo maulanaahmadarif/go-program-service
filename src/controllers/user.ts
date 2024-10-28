@@ -42,7 +42,7 @@ export const userSignup = async (req: Request, res: Response) => {
       program_saled_id,
       phone_number,
       job_title,
-      company_id
+      company_id,
     } = req.body
 
     // Hash the password
@@ -57,6 +57,7 @@ export const userSignup = async (req: Request, res: Response) => {
       program_saled_id,
       phone_number,
       job_title,
+      total_points: 400
     });
 
     const userProfile = {
