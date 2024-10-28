@@ -5,11 +5,6 @@ import cors from 'cors';
 import path from 'path';
 
 import { sequelize } from './db';
-import { User } from '../models/User';
-import { Optional } from 'sequelize';
-import { FormType } from '../models/FormType';
-import { Form } from '../models/Form';
-import { UserAction } from '../models/UserAction';
 import router from './routes';
 
 // Load environment variables
@@ -19,8 +14,8 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors());
 app.use(bodyParser.json());
+app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use('/public', express.static(path.join(__dirname, 'public')));

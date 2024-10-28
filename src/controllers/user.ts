@@ -20,10 +20,14 @@ export const userLogin = async (req: Request, res: Response) => {
 
     // Generate JWT token
     const token = jwt.sign({ userId: user.user_id, email: user.email, companyId: user.company_id }, process.env.JWT_SECRET as string, {
-      expiresIn: '1h',  // Adjust expiration as needed
+      expiresIn: '1d',  // Adjust expiration as needed
     });
 
-    res.status(200).json({ message: 'Login successful', token, user_id: user.user_id });
+    const refreshToken = jwt.sign({ userId: user.user_id, email: user.email, companyId: user.company_id }, process.env.REFRESH_JWT_SECRET as string, {
+      expiresIn: '7d',  // Adjust expiration as needed
+    });
+
+    res.status(200).json({ message: 'Login successful', token, refreshToken });
   } catch (error) {
     res.status(500).json({ message: 'Something went wrong', error });
   }
