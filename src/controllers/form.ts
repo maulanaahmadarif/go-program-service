@@ -66,8 +66,8 @@ export const formSubmission = async (req: any, res: Response) => {
       entity_type: 'FORM',
       action_type: req.method,
       form_id: submission.form_id,
-      ip_address: req.ip,
-      user_agent: req.get('User-Agent'),
+      // ip_address: req.ip,
+      // user_agent: req.get('User-Agent'),
     });
 
     res.status(200).json({ message: `Form successfully submitted`, status: res.status });
