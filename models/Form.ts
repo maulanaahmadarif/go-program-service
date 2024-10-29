@@ -21,11 +21,13 @@ import { User } from './User';  // Adjust paths as per your project structure
 import { FormType } from './FormType';
 import { UserAction } from './UserAction';
 import { PointTransaction } from './PointTransaction';
+import { Project } from './Project';
 
 export interface FormAttributes {
   form_id?: number;
   user_id: number;
   form_type_id: number;
+  project_id: number;
   status?: string;
   form_data: object,
   createdAt?: Date;
@@ -52,6 +54,11 @@ export class Form extends Model<FormAttributes, FormCreationAttributes> {
   @AllowNull(false)
   @Column(DataType.INTEGER)
   public form_type_id!: number;
+
+  @ForeignKey(() => Project)
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  project_id!: number;
 
   @AllowNull(false)
   @Default('pending')
@@ -82,4 +89,7 @@ export class Form extends Model<FormAttributes, FormCreationAttributes> {
 
   @HasMany(() => PointTransaction)
   point_transaction!: PointTransaction[];
+
+  @BelongsTo(() => Project)
+  project!: Project;
 }

@@ -9,6 +9,7 @@ import { UserAction } from "../models/UserAction";
 import { PointTransaction } from "../models/PointTransaction";
 import { Redemption } from "../models/Redemption";
 import { Company } from "../models/Company";
+import { Project } from '../models/Project';
 
 const env = process.env.NODE_ENV || "development";
 
@@ -20,7 +21,7 @@ export const sequelize = new Sequelize({
   port: dbConfig.port,
   password: dbConfig.password,
   database: dbConfig.database,
-  models: [User, Product, FormType, Form, UserAction, PointTransaction, Redemption, Company],
+  models: [User, Product, FormType, Form, UserAction, PointTransaction, Redemption, Company, Project],
   dialect: dbConfig.dialect,
   dialectOptions: {
     ssl: {

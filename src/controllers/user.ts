@@ -27,7 +27,18 @@ export const userLogin = async (req: Request, res: Response) => {
       expiresIn: '7d',  // Adjust expiration as needed
     });
 
-    res.status(200).json({ message: 'Login successful', token, refreshToken });
+    const userDetail = {
+      user_id: user.user_id,
+      email: user.email,
+      company_id: user.company_id,
+      program_saled_id: user.program_saled_id,
+      job: user.job_title,
+      username: user.username,
+      user_point: user.total_points,
+      phone_number: user.phone_number,
+    }
+
+    res.status(200).json({ message: 'Login successful', token, refreshToken, user: userDetail });
   } catch (error) {
     res.status(500).json({ message: 'Something went wrong', error });
   }
@@ -104,6 +115,8 @@ export const getUserProfile = async (req: any, res: Response) => {
     // Build the user profile response
     const userProfile = {
       id: user.user_id,
+      username: user.username,
+      program_saled_id: user.program_saled_id,
       email: user.email,
       company: user.company?.name ?? null,
       phone_number: user.phone_number ?? null,

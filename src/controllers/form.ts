@@ -33,7 +33,7 @@ export const createFormType = async (req: Request, res: Response) => {
 };
 
 export const formSubmission = async (req: any, res: Response) => {
-  const { form_type_id, form_data } = req.body;
+  const { form_type_id, form_data, project_id, product_quantity = 0 } = req.body;
 
   const userId = req.user?.userId;
   const companyId = req.user?.companyId;
@@ -43,19 +43,58 @@ export const formSubmission = async (req: any, res: Response) => {
       user_id: userId,
       form_type_id,
       form_data,
+      project_id,
     })
 
     // Update user points based on the form submission
     const company = await Company.findByPk(companyId);
     const user = await User.findByPk(userId);
     const formType = await FormType.findByPk(form_type_id);
+
+    let additionalPoint = 0;
+    if (formType) {
+      if (formType.form_type_id === 1) {
+        if (product_quantity > 1 && product_quantity <= 50) {
+          additionalPoint = 10
+        } else if (product_quantity > 50 && product_quantity <= 300) {
+          additionalPoint = 20
+        } else if (product_quantity > 300) {
+          additionalPoint = 40
+        }
+      } else if (formType.form_type_id === 4) {
+        if (product_quantity > 1 && product_quantity <= 50) {
+          additionalPoint = 20
+        } else if (product_quantity > 50 && product_quantity <= 300) {
+          additionalPoint = 50
+        } else if (product_quantity > 300) {
+          additionalPoint = 100
+        }
+      } else if (formType.form_type_id === 5) {
+        if (product_quantity > 1 && product_quantity <= 50) {
+          additionalPoint = 50
+        } else if (product_quantity > 50 && product_quantity <= 300) {
+          additionalPoint = 100
+        } else if (product_quantity > 300) {
+          additionalPoint = 200
+        }
+      } else if (formType.form_type_id === 6) {
+        if (product_quantity > 1 && product_quantity <= 50) {
+          additionalPoint = 100
+        } else if (product_quantity > 50 && product_quantity <= 300) {
+          additionalPoint = 200
+        } else if (product_quantity > 300) {
+          additionalPoint = 400
+        }
+      }
+    }
+
     if (user && formType) {
-      user.total_points = (user.total_points || 0) + formType.point_reward; // Assuming `points` field exists on User
+      user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
       await user.save();
     }
 
     if (company && formType) {
-      company.total_points = (company.total_points || 0) + formType.point_reward; // Assuming `points` field exists on User
+      company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
       await company.save();
     }
 

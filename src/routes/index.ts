@@ -5,6 +5,7 @@ import formRoutes from './form';
 import actionRoutes from './action';
 import uploadRoutes from './upload';
 import authRoutes from './auth';
+import projectRoutes from './project';
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.use('/company', companyRoutes);
 router.use('/action', actionRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/auth', authRoutes);
+router.use('/project', projectRoutes);
 
 export default router;

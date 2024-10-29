@@ -21,6 +21,7 @@ import { Form } from './Form';                   // Adjust paths based on your p
 import { Company } from './Company';
 import { UserAction } from './UserAction';       // Adjust paths based on your project structure
 import { PointTransaction } from './PointTransaction';  // Adjust paths based on your project structure
+import { Project } from './Project'
 
 
 export interface UserAttributes {
@@ -100,6 +101,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   // Define associations
   @HasMany(() => UserAction)
   user_action!: UserAction[];
+
+  @HasMany(() => Project)
+  project!: Project[];
 
   @HasMany(() => Form)
   form!: Form[];
