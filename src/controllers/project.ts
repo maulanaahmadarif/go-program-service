@@ -2,6 +2,12 @@ import { Request, Response } from 'express';
 
 import { Project } from '../../models/Project';
 
+interface CustomRequest extends Request {
+  user?: {
+    userId: number;
+  };
+}
+
 export const createProject = async (req: Request, res: Response) => {
   const { name, user_id } = req.body;
 
@@ -26,11 +32,11 @@ export const createProject = async (req: Request, res: Response) => {
   }
 };
 
-export const getProjectList = async (req: Request, res: Response) => {
+export const getProjectList = async (req: CustomRequest, res: Response) => {
   try {
     const projects = await Project.findAll(
       {
-        attributes: { exclude: ['user_id'] },
+        where: { user_id: req.user?.userId },
         order: [['createdAt', 'DESC']]
       }
     )

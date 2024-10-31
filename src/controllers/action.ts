@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { UserAction } from '../../models/UserAction';
 import { Form } from '../../models/Form';
 import { FormType } from '../../models/FormType';
+import { Project } from '../../models/Project';
 
 interface CustomRequest extends Request {
   user?: {
@@ -16,7 +17,14 @@ export const getUserActionList = async (req: CustomRequest, res: Response) => {
     
     const actions = await UserAction.findAll({
       where: { user_id },
-      include: [{ model: Form, attributes: ['form_type_id'], include: [{ model: FormType, attributes: ['form_name'] }] }]
+      include: [{
+        model: Form,
+        attributes: ['form_type_id'],
+        include: [
+          { model: FormType, attributes: ['form_name'] },
+          { model: Project, attributes: ['project_id', 'name'] }
+        ]
+      }]
     })
 
     res.status(200).json({ message: 'List of user action', status: res.status, data: actions });

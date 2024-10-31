@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import { Company } from '../../models/Company';
+import { sendEmail } from '../services/mail';
 
 export const createCompany = async (req: Request, res: Response) => {
   const { name, address, industry } = req.body;

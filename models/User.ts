@@ -28,13 +28,18 @@ export interface UserAttributes {
   user_id?: number;
   username: string;
   email: string;
+  fullname?: string;
+  user_type: string;
   company_id: number;
   password_hash: string;
   program_saled_id: string;
   phone_number?: string;
   job_title?: string;
   total_points?: number;
+  accomplishment_total_points?: number;
   is_active?: boolean;
+  reset_token?: string | null;
+  reset_token_expiration?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -65,6 +70,14 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Column(DataType.STRING(255)) // Specify data type
   public email!: string;
 
+  @AllowNull(true)
+  @Column(DataType.STRING(255)) // Specify data type
+  public fullname?: string;
+
+  @AllowNull(false)
+  @Column(DataType.STRING(255)) // Specify data type
+  public user_type!: string;
+
   @AllowNull(false)
   @Column(DataType.STRING(255)) // Specify data type
   public password_hash!: string;
@@ -83,11 +96,23 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
 
   @Default(0)
   @Column(DataType.INTEGER) // Specify data type
+  public accomplishment_total_points?: number;
+
+  @Default(0)
+  @Column(DataType.INTEGER) // Specify data type
   public total_points?: number;
 
   @Default(true)
   @Column(DataType.BOOLEAN) // Specify data type
   public is_active?: boolean;
+
+  @AllowNull(true)
+  @Column(DataType.STRING(255)) // Specify data type
+  public reset_token?: string;
+
+  @AllowNull(true)
+  @Column(DataType.DATE) // Specify data type
+  public reset_token_expiration?: Date;
 
   // Timestamps
   @CreatedAt
