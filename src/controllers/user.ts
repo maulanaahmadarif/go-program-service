@@ -147,6 +147,7 @@ export const getUserProfile = async (req: any, res: Response) => {
       user_point: user.total_points,
       company_point: user.company?.total_points,
       accomplishment_total_points: user.accomplishment_total_points,
+      fullname: user.fullname,
     };
     
 
@@ -207,7 +208,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     await user.save();
 
     // Send email
-    const resetUrl = `http://your-frontend-url/reset-password?token=${token}`;
+    const resetUrl = `https://go-program-app.web.app/reset-password?token=${token}`;
     await sendEmail({ to: email, subject: 'Password Reset', html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>` });
 
     res.status(200).json({ message: 'Reset link sent to your email' });

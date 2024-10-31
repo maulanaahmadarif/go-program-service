@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import { Project } from '../../models/Project';
+import { Form } from '../../models/Form';
 
 interface CustomRequest extends Request {
   user?: {
@@ -36,6 +37,7 @@ export const getProjectList = async (req: CustomRequest, res: Response) => {
   try {
     const projects = await Project.findAll(
       {
+        include: [{ model: Form }],
         where: { user_id: req.user?.userId },
         order: [['createdAt', 'DESC']]
       }

@@ -7,6 +7,7 @@ import { Company } from '../../models/Company';
 
 import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
+import { Project } from '../../models/Project';
 
 export const createFormType = async (req: Request, res: Response) => {
   const { form_name, point_reward } = req.body;
@@ -50,6 +51,14 @@ export const formSubmission = async (req: any, res: Response) => {
     const company = await Company.findByPk(companyId);
     const user = await User.findByPk(userId);
     const formType = await FormType.findByPk(form_type_id);
+    const formsCount = await Form.count(
+      {
+        where: {
+          user_id: userId,
+          project_id: project_id,
+        }
+      }
+    )
 
     let additionalPoint = 0;
     if (formType) {
@@ -117,6 +126,17 @@ export const formSubmission = async (req: any, res: Response) => {
         } else if (product_quantity > 300) {
           additionalPoint = 200
         }
+      }
+    }
+
+  
+    if (user?.user_type === 'T2') {
+      if (formsCount === 6) {
+        additionalPoint += 200
+      }
+    } else if (user?.user_type === 'T1') {
+      if (formsCount === 4) {
+        additionalPoint += 200
       }
     }
 
