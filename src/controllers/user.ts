@@ -97,7 +97,7 @@ export const userSignup = async (req: Request, res: Response) => {
     const company = await Company.findByPk(company_id);
 
     if (company) {
-      company.total_points = bonusSignupPoint;
+      company.total_points = company.total_points as number + bonusSignupPoint;
       await company.save();
     }
 
