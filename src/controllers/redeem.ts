@@ -11,7 +11,7 @@ interface CustomRequest extends Request {
 }
 
 export const redeemPoint = async (req: CustomRequest, res: Response) => {
-  const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code } = req.body;
+  const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes } = req.body;
   const user_id = req.user?.userId as number
 
   const transaction = await sequelize.transaction();
@@ -25,7 +25,8 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       fullname,
       email,
       phone_number,
-      postal_code
+      postal_code,
+      notes
     }, { transaction })
 
     const user = await User.findByPk(user_id, { transaction });

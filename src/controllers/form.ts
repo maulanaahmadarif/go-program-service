@@ -40,6 +40,7 @@ export const formSubmission = async (req: any, res: Response) => {
 
   const userId = req.user?.userId;
   const companyId = req.user?.companyId;
+  let isProjectFormCompleted = false;
   
   try {
     const submission = await Form.create({
@@ -47,7 +48,7 @@ export const formSubmission = async (req: any, res: Response) => {
       form_type_id,
       form_data,
       project_id,
-    }, { transaction })
+    })
 
     // Update user points based on the form submission
     const company = await Company.findByPk(companyId, { transaction });
@@ -136,10 +137,12 @@ export const formSubmission = async (req: any, res: Response) => {
     if (user?.user_type === 'T2') {
       if (formsCount === 6) {
         additionalPoint += 200
+        isProjectFormCompleted = true;
       }
     } else if (user?.user_type === 'T1') {
       if (formsCount === 4) {
         additionalPoint += 200
+        isProjectFormCompleted = true;
       }
     }
 
@@ -167,7 +170,7 @@ export const formSubmission = async (req: any, res: Response) => {
 
     await transaction.commit();
 
-    res.status(200).json({ message: `Form successfully submitted`, status: res.status });
+    res.status(200).json({ message: `Form successfully submitted`, status: res.status, data: { form_completed: isProjectFormCompleted } });
   } catch (error: any) {
     await transaction.rollback();
     console.error('Error creating form:', error);

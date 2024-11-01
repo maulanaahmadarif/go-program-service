@@ -23,8 +23,9 @@ export const getUserActionList = async (req: CustomRequest, res: Response) => {
         include: [
           { model: FormType, attributes: ['form_name'] },
           { model: Project, attributes: ['project_id', 'name'] }
-        ]
-      }]
+        ],
+      }],
+      order: [['createdAt', 'DESC']]
     })
 
     res.status(200).json({ message: 'List of user action', status: res.status, data: actions });
