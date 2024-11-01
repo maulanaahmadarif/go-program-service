@@ -67,7 +67,7 @@ export const formSubmission = async (req: any, res: Response) => {
     let additionalPoint = 0;
     if (formType) {
       if (formType.form_type_id === 1) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 10
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 20
@@ -75,7 +75,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 40
         }
       } else if (formType.form_type_id === 4) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 20
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 50
@@ -83,7 +83,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 100
         }
       } else if (formType.form_type_id === 5) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 50
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 100
@@ -91,7 +91,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 200
         }
       } else if (formType.form_type_id === 6) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 100
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 200
@@ -99,7 +99,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 400
         }
       } else if (formType.form_type_id === 7) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 5
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 10
@@ -107,7 +107,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 20
         }
       } else if (formType.form_type_id === 8) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 10
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 25
@@ -115,7 +115,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 50
         }
       } else if (formType.form_type_id === 9) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 25
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 50
@@ -123,7 +123,7 @@ export const formSubmission = async (req: any, res: Response) => {
           additionalPoint = 100
         }
       } else if (formType.form_type_id === 10) {
-        if (product_quantity > 1 && product_quantity <= 50) {
+        if (product_quantity >= 1 && product_quantity <= 50) {
           additionalPoint = 50
         } else if (product_quantity > 50 && product_quantity <= 300) {
           additionalPoint = 100
