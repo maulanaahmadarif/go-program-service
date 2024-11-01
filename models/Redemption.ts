@@ -28,13 +28,12 @@ export interface RedemptionAttributes {
   user_id: number;
   product_id: number;
   points_spent: number;
-  status: string;
+  fullname: string;
+  email: string;
+  phone_number: string;
   shipping_address: string;
-  tracking_number: string;
+  postal_code: string;
   notes?: string;
-  redeemed_at?: Date;
-  processed_at?: Date;
-  delivered_at?: Date;
   createdAt?: Date;
   updatedAt?: Date;  
 }
@@ -65,33 +64,28 @@ export class Redemption extends Model<RedemptionAttributes, RedemptionCreationAt
   public points_spent!: number;
 
   @AllowNull(false)
-  @Default('pending')
-  @Column(DataType.STRING(50))
-  public status!: string;
+  @Column(DataType.STRING(255))
+  public fullname!: string;
+
+  @AllowNull(false)
+  @Column(DataType.STRING(255))
+  public email!: string;
+
+  @AllowNull(false)
+  @Column(DataType.STRING(255))
+  public phone_number!: string;
 
   @AllowNull(false)
   @Column(DataType.STRING(255))
   public shipping_address!: string; // Adjust as per the structure of the shipping address
 
-  @AllowNull(true)
-  @Column(DataType.STRING(100))
-  public tracking_number?: string;
+  @AllowNull(false)
+  @Column(DataType.STRING(10))
+  public postal_code!: string;
 
   @AllowNull(true)
   @Column(DataType.TEXT)
   public notes?: string;
-
-  @AllowNull(true)
-  @Column(DataType.DATE)
-  public redeemed_at?: Date;
-
-  @AllowNull(true)
-  @Column(DataType.DATE)
-  public processed_at?: Date;
-
-  @AllowNull(true)
-  @Column(DataType.DATE)
-  public delivered_at?: Date;
 
   // Timestamps
   @CreatedAt

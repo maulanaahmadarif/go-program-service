@@ -23,10 +23,9 @@ export interface ProductTypeAttributes {
   description: string;
   points_required: number;
   stock_quantity: number;
-  image_url: string;
-  is_active: boolean;
+  image_url?: string;
+  size?: string[];
   category: string;
-  expiry_date: Date;
   createdAt?: Date;
   updatedAt?: Date;  
 }
@@ -64,18 +63,14 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
   @Column(DataType.STRING(255))
   public image_url?: string;
 
-  @Default(true)
-  @Column(DataType.BOOLEAN)
-  public is_active!: boolean;
+  // Optional size column for apparel category
+  @AllowNull(true)
+  @Column(DataType.ARRAY(DataType.STRING))
+  public size?: string[];
 
   @AllowNull(true)
   @Column(DataType.STRING(100))
   public category?: string;
-
-  @AllowNull(true)
-  @Column(DataType.DATE)
-  // @Validate
-  public expiry_date?: Date;
 
   // Timestamps
   @CreatedAt

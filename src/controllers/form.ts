@@ -4,7 +4,7 @@ import { FormType } from '../../models/FormType';
 import { Form } from '../../models/Form';
 import { User } from '../../models/User';
 import { Company } from '../../models/Company';
-
+import { sequelize } from '../db';
 import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
 import { Project } from '../../models/Project';
@@ -36,6 +36,8 @@ export const createFormType = async (req: Request, res: Response) => {
 export const formSubmission = async (req: any, res: Response) => {
   const { form_type_id, form_data, project_id, product_quantity = 0 } = req.body;
 
+  const transaction = await sequelize.transaction();
+
   const userId = req.user?.userId;
   const companyId = req.user?.companyId;
   
@@ -45,18 +47,19 @@ export const formSubmission = async (req: any, res: Response) => {
       form_type_id,
       form_data,
       project_id,
-    })
+    }, { transaction })
 
     // Update user points based on the form submission
-    const company = await Company.findByPk(companyId);
-    const user = await User.findByPk(userId);
-    const formType = await FormType.findByPk(form_type_id);
+    const company = await Company.findByPk(companyId, { transaction });
+    const user = await User.findByPk(userId, { transaction });
+    const formType = await FormType.findByPk(form_type_id, { transaction });
     const formsCount = await Form.count(
       {
         where: {
           user_id: userId,
           project_id: project_id,
-        }
+        },
+        transaction
       }
     )
 
@@ -143,12 +146,12 @@ export const formSubmission = async (req: any, res: Response) => {
     if (user && formType) {
       user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
       user.accomplishment_total_points = (user.total_points || 0) + formType.point_reward + additionalPoint;
-      await user.save();
+      await user.save({ transaction });
     }
 
     if (company && formType) {
       company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
-      await company.save();
+      await company.save({ transaction });
     }
 
     // await logAction(userId, req.method, 1, 'FORM', req.ip, req.get('User-Agent'));
@@ -162,8 +165,11 @@ export const formSubmission = async (req: any, res: Response) => {
       // user_agent: req.get('User-Agent'),
     });
 
+    await transaction.commit();
+
     res.status(200).json({ message: `Form successfully submitted`, status: res.status });
   } catch (error: any) {
+    await transaction.rollback();
     console.error('Error creating form:', error);
 
     // Handle validation errors from Sequelize

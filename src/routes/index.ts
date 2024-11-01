@@ -6,6 +6,8 @@ import actionRoutes from './action';
 import uploadRoutes from './upload';
 import authRoutes from './auth';
 import projectRoutes from './project';
+import productRoutes from './product';
+import redeemRoutes from './redeem';
 
 const router = express.Router();
 
@@ -16,5 +18,7 @@ router.use('/action', actionRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/auth', authRoutes);
 router.use('/project', projectRoutes);
+router.use('/product', productRoutes);
+router.use('/point', redeemRoutes);
 
 export default router;
