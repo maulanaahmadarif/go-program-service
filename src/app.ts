@@ -15,8 +15,30 @@ const app = express();
 
 // Middleware
 app.use(bodyParser.json());
-app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Allowed origins array
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://go-program-app.web.app',
+  'https://gopro-lenovoid.com',
+];
+
+// CORS options
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true); // Allow the request
+    } else {
+      callback(new Error('Not allowed by CORS')); // Deny the request
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Add allowed methods as needed
+  credentials: true, // If you need cookies to be included in CORS requests
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
 
 app.use(express.static(path.join(process.cwd(), 'public')));
 app.use('/api', router)
