@@ -4,6 +4,7 @@ import { UserAction } from '../../models/UserAction';
 import { Form } from '../../models/Form';
 import { FormType } from '../../models/FormType';
 import { Project } from '../../models/Project';
+import { Redemption } from '../../models/Redemption';
 
 interface CustomRequest extends Request {
   user?: {
@@ -17,14 +18,19 @@ export const getUserActionList = async (req: CustomRequest, res: Response) => {
     
     const actions = await UserAction.findAll({
       where: { user_id },
-      include: [{
-        model: Form,
-        attributes: ['form_type_id'],
-        include: [
-          { model: FormType, attributes: ['form_name'] },
-          { model: Project, attributes: ['project_id', 'name'] }
-        ],
-      }],
+      include: [
+        {
+          model: Form,
+          attributes: ['form_type_id'],
+          include: [
+            { model: FormType, attributes: ['form_name'] },
+            { model: Project, attributes: ['project_id', 'name'] }
+          ]
+        },
+        {
+          model: Redemption
+        }
+      ],
       order: [['createdAt', 'DESC']]
     })
 

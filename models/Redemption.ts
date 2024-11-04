@@ -15,11 +15,13 @@ import {
   Validate,
   BeforeCreate,
   AfterCreate,
-  ForeignKey
+  ForeignKey,
+  HasMany
 } from 'sequelize-typescript';
 import { Optional } from "sequelize";
 
 import { User } from './User';           // Adjust paths based on your project structure
+import { UserAction } from './UserAction'; 
 import { Product } from './Product';     // Adjust paths based on your project structure
 import { PointTransaction } from './PointTransaction'; // Adjust paths based on your project structure
 
@@ -100,6 +102,9 @@ export class Redemption extends Model<RedemptionAttributes, RedemptionCreationAt
 
   @BelongsTo(() => Product, "product_id")
   product!: Product;
+
+  @HasMany(() => UserAction)
+  user_action!: UserAction[];
 
   @HasOne(() => PointTransaction, { as: "point_deduction" })
   point_transaction!: PointTransaction;

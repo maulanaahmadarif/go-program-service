@@ -1,8 +1,13 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import dayjs from 'dayjs';
 
 import { Redemption } from '../../models/Redemption';
 import { User } from '../../models/User';
+import { UserAction } from '../../models/UserAction';
 import { sequelize } from '../db';
+import { sendEmail } from '../services/mail';
 
 interface CustomRequest extends Request {
   user?: {
@@ -36,7 +41,32 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       await user.save({ transaction });
     }
 
+    await UserAction.create({
+      user_id: user_id,
+      entity_type: 'REDEEM',
+      action_type: req.method,
+      redemption_id: redemption.redemption_id,
+      // ip_address: req.ip,
+      // user_agent: req.get('User-Agent'),
+    }, { transaction });
+
     await transaction.commit();
+
+    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
+
+    htmlTemplate = htmlTemplate
+      .replace('{{redemptionDate}}', dayjs(redemption.createdAt).format('DD MM YYYY'))
+      .replace('{{redemptionItem}}', redemption.product.name)
+      .replace('{{partnerName}}', fullname)
+      .replace('{{email}}', email)
+      .replace('{{phoneNumber}}', phone_number)
+      .replace('{{size}}', notes || '-')
+      .replace('{{address}}', shipping_address)
+      .replace('{{postalCode}}', postal_code)
+      .replace('{{accomplishmentScore}}', String(user?.accomplishment_total_points ?? 'N/A'))
+      .replace('{{currentScore}}', String(user?.total_points ?? 'N/A'));
+
+    await sendEmail({ to: email, subject: 'Lenovo Go Pro Redemption Notification', html: htmlTemplate });
 
     res.status(200).json({ message: 'Success redeem', status: res.status });
   } catch (error: any) {

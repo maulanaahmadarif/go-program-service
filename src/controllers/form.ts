@@ -48,6 +48,7 @@ export const formSubmission = async (req: any, res: Response) => {
       form_type_id,
       form_data,
       project_id,
+      status: 'approved'
     })
 
     // Update user points based on the form submission

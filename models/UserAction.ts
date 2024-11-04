@@ -17,13 +17,15 @@ import { Optional } from "sequelize";
 import { DataTypes } from 'sequelize';
 import { User } from './User';                   // Adjust paths based on your project structure
 import { Form } from './Form';                   // Adjust paths based on your project structure
+import { Redemption } from './Redemption';
 
 export interface UserAttributes {
   action_id?: number;
   user_id: number;
   action_type: string;
   entity_type: 'FORM' | 'REDEEM';
-  form_id: number;
+  form_id?: number;
+  redemption_id?: number;
   ip_address?: string;
   user_agent?: string;
   createdAt?: Date;
@@ -60,6 +62,11 @@ export class UserAction extends Model<UserAttributes, UserCreationAttributes> {
   public form_id?: number;
 
   @AllowNull(true)
+  @ForeignKey(() => Redemption)
+  @Column
+  public redemption_id?: number;
+
+  @AllowNull(true)
   @Column(DataTypes.INET)
   public ip_address?: string;
 
@@ -80,4 +87,7 @@ export class UserAction extends Model<UserAttributes, UserCreationAttributes> {
 
   @BelongsTo(() => Form, "form_id")
   form!: Form;
+
+  @BelongsTo(() => Redemption, "redemption_id")
+  redemption!: Redemption;
 }

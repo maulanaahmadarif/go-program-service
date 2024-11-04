@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redemption Details</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 20px;
+      padding: 20px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    .container {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #0056b3;
+    }
+    .details, .score {
+      margin-bottom: 20px;
+    }
+    .details p, .score p {
+      margin: 5px 0;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 0.9em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hi Partners!</h1>
+    <p>Thank you for joining the Lenovo Go Pro Program. We hope you find it enjoyable and motivating for your journey.</p>
+    
+    <div class="details">
+      <h2>Here is your redemption details:</h2>
+      <p><strong>Date:</strong> {{redemptionDate}}</p>
+      <p><strong>Redemption Item:</strong> {{redemptionItem}}</p>
+      <p><strong>Full Name:</strong> {{partnerName}}</p>
+      <p><strong>Email:</strong> {{email}}</p>
+      <p><strong>Phone Number:</strong> {{phoneNumber}}</p>
+      <p><strong>Size:</strong> {{size}}</p>
+      <p><strong>Shipping Address:</strong> {{address}}</p>
+      <p><strong>Postal Code:</strong> {{postalCode}}</p>
+    </div>
+    
+    <div class="score">
+      <h2>Score Calculation:</h2>
+      <p><strong>Accomplishment Score:</strong> {{accomplishmentScore}}</p>
+      <p><strong>Current Score:</strong> {{currentScore}}</p>
+    </div>
+    
+    <p>Please wait for 3-5 working days for shipping management. Thank you!</p>
+    
+    <div class="footer">
+      <p>Lenovo Go Pro Program Team</p>
+    </div>
+  </div>
+</body>
+</html>
