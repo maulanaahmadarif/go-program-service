@@ -38,8 +38,9 @@ export interface UserAttributes {
   total_points?: number;
   accomplishment_total_points?: number;
   is_active?: boolean;
-  reset_token?: string | null;
-  reset_token_expiration?: Date | null;
+  token?: string | null;
+  token_purpose?: 'EMAIL_CONFIRMATION' | 'PASSWORD_RESET' | null;
+  token_expiration?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -102,17 +103,21 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Column(DataType.INTEGER) // Specify data type
   public total_points?: number;
 
-  @Default(true)
+  @Default(false)
   @Column(DataType.BOOLEAN) // Specify data type
   public is_active?: boolean;
 
   @AllowNull(true)
   @Column(DataType.STRING(255)) // Specify data type
-  public reset_token?: string;
+  public token!: string;
+
+  @AllowNull(true)
+  @Column(DataType.ENUM('EMAIL_CONFIRMATION', 'PASSWORD_RESET'))
+  public token_purpose!: 'EMAIL_CONFIRMATION' | 'PASSWORD_RESET';
 
   @AllowNull(true)
   @Column(DataType.DATE) // Specify data type
-  public reset_token_expiration?: Date;
+  public token_expiration!: Date;
 
   // Timestamps
   @CreatedAt

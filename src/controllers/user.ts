@@ -24,6 +24,10 @@ export const userLogin = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    if (!user.is_active) {
+      return res.status(400).json({ message: 'Email has not been confirmed' });
+    }
+
     // Generate JWT token
     const token = jwt.sign({ userId: user.user_id, email: user.email, companyId: user.company_id }, process.env.JWT_SECRET as string, {
       expiresIn: '1d',  // Adjust expiration as needed
@@ -70,6 +74,8 @@ export const userSignup = async (req: Request, res: Response) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const token = crypto.randomBytes(32).toString('hex');
+
     // Create user in the database
     const user = await User.create({
       username,
@@ -82,7 +88,10 @@ export const userSignup = async (req: Request, res: Response) => {
       job_title,
       total_points: bonusSignupPoint,
       accomplishment_total_points: bonusSignupPoint,
-      fullname
+      fullname,
+      token,
+      token_purpose: 'EMAIL_CONFIRMATION',
+      token_expiration: new Date(Date.now() + 3600000),
     });
 
     const userProfile = {
@@ -103,7 +112,11 @@ export const userSignup = async (req: Request, res: Response) => {
       await company.save();
     }
 
-    const htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'welcomeEmail.html'), 'utf-8');
+    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'emailConfirmation.html'), 'utf-8');
+
+    htmlTemplate = htmlTemplate
+      .replace('{{userName}}', user.username)
+      .replace('{{confirmationLink}}', `${process.env.APP_URL}/email-confirmation?token=${token}`)
 
     await sendEmail({ to: user.email, subject: 'Welcome to The Lenovo Go Pro Program', html: htmlTemplate });
 
@@ -205,8 +218,9 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
     // Generate a reset token
     const token = crypto.randomBytes(32).toString('hex');
-    user.reset_token = token;
-    user.reset_token_expiration = new Date(Date.now() + 3600000); // 1 hour expiration
+    user.token = token;
+    user.token_purpose = 'PASSWORD_RESET';
+    user.token_expiration = new Date(Date.now() + 3600000); // 1 hour expiration
     await user.save();
 
     // Send email
@@ -220,14 +234,53 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 }
 
+export const userSignupConfirmation = async (req: Request, res: Response) => {
+  const { token } = req.params;
+
+  try {
+    const user = await User.findOne({
+      where: {
+        token: token,
+        // token_expiration: {
+        //   [Op.gt]: new Date(),
+        // },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
+
+    // Update the password
+    user.is_active = true;
+    user.token = null as any;
+    user.token_purpose = null as any;
+    user.token_expiration = null as any;
+    await user.save();
+
+    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'welcomeConfirmation.html'), 'utf-8');
+
+    htmlTemplate = htmlTemplate
+      .replace('{{homePageLink}}', process.env.APP_URL as string)
+      .replace('{{faqLink}}', `${process.env.APP_URL}/faq`)
+
+    await sendEmail({ to: user.email, subject: 'Welcome to The Lenovo Go Pro Program', html: htmlTemplate });
+
+    res.status(200).json({ message: 'Email confirmed successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Something went wrong' });
+  }
+}
+
 export const resetPassword = async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
 
   try {
     const user = await User.findOne({
       where: {
-        reset_token: token,
-        reset_token_expiration: {
+        token: token,
+        token_expiration: {
           [Op.gt]: new Date(),
         },
       },
@@ -240,8 +293,9 @@ export const resetPassword = async (req: Request, res: Response) => {
     // Update the password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password_hash = hashedPassword; // You should hash the password here!
-    user.reset_token = null as any;
-    user.reset_token_expiration = null as any;
+    user.token = null as any;
+    user.token_purpose = null as any;
+    user.token_expiration = null as any;
     await user.save();
 
     res.status(200).json({ message: 'Password updated successfully' });
