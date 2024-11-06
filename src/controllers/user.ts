@@ -258,7 +258,7 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
     user.token_expiration = null as any;
     await user.save();
 
-    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'welcomeConfirmation.html'), 'utf-8');
+    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'welcomeEmail.html'), 'utf-8');
 
     htmlTemplate = htmlTemplate
       .replace('{{homePageLink}}', process.env.APP_URL as string)
