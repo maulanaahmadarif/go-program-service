@@ -68,7 +68,8 @@ export const userSignup = async (req: Request, res: Response) => {
       job_title,
       company_id,
       user_type,
-      fullname
+      fullname,
+      custom_company
     } = req.body
 
     // Hash the password
@@ -76,14 +77,23 @@ export const userSignup = async (req: Request, res: Response) => {
 
     const token = crypto.randomBytes(32).toString('hex');
 
+    let normalize_company_id = company_id
+    let normalize_program_saled_id = program_saled_id;
+
+    if (!company_id) {
+      const customCompany = await Company.create({ name: custom_company, industry: 'Custom Company' })
+      normalize_company_id = customCompany.company_id;
+      normalize_program_saled_id = `${program_saled_id}-0${customCompany.company_id}`
+    }
+
     // Create user in the database
     const user = await User.create({
       username,
-      company_id,
+      company_id: normalize_company_id,
       email,
       user_type,
       password_hash: hashedPassword,
-      program_saled_id,
+      program_saled_id: normalize_program_saled_id,
       phone_number,
       job_title,
       total_points: bonusSignupPoint,
