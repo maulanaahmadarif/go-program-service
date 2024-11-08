@@ -48,6 +48,10 @@ export const getCompanyList = async (req: Request, res: Response) => {
           {
             model: User,
             attributes: [], // Exclude user fields, we only want the count
+            where: {
+              level: 'CUSTOMER'
+            },
+            required: true
           },
         ],
         group: ['Company.company_id'],
@@ -55,6 +59,48 @@ export const getCompanyList = async (req: Request, res: Response) => {
     )
 
     res.status(200).json({ message: 'List of company', status: res.status, data: companies });
+  } catch (error: any) {
+    console.error('Error fetching company:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+};
+
+export const getCompanyDetail = async (req: Request, res: Response) => {
+  try {
+    const { company_id } = req.params
+    const sortField: string = (req.query.sortBy as string) || 'total_points';
+    const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
+
+    const companies = await Company.findByPk(company_id, {
+      order: [[sortField, orderDirection]],
+      attributes: {
+        include: [
+          // Add a virtual field "userCount" to count the number of users in each company
+          [Sequelize.fn('COUNT', Sequelize.col('users.user_id')), 'total_users']
+        ]
+      },
+      include: [
+        {
+          model: User,
+          where: {
+            level: 'CUSTOMER'
+          },
+          attributes: [], // Exclude user fields, we only want the count
+          required: true
+        },
+      ],
+      group: ['Company.company_id'],
+    })
+
+    res.status(200).json({ message: 'Company Detail', status: res.status, data: companies });
   } catch (error: any) {
     console.error('Error fetching company:', error);
 
