@@ -32,6 +32,7 @@ export const createCompany = async (req: Request, res: Response) => {
 
 export const getCompanyList = async (req: Request, res: Response) => {
   try {
+    const { fetch_all = 0 } = req.query;
     const sortField: string = (req.query.sortBy as string) || 'total_points';
     const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
 
@@ -51,7 +52,7 @@ export const getCompanyList = async (req: Request, res: Response) => {
             where: {
               level: 'CUSTOMER'
             },
-            required: true
+            required: Number(fetch_all) === 0
           },
         ],
         group: ['Company.company_id'],
