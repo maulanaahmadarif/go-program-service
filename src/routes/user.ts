@@ -1,13 +1,24 @@
 import express from 'express';
 
 // import authenticate from '../middleware/auth';
-import { userLogin, userSignup, getUserProfile, getUserList, forgotPassword, resetPassword, updateUser, userSignupConfirmation } from '../controllers/user';
+import {
+  userLogin,
+  userSignup,
+  getUserProfile,
+  getUserList,
+  forgotPassword,
+  resetPassword,
+  updateUser,
+  userSignupConfirmation,
+  addInternalUser,
+} from '../controllers/user';
 import authenticate from '../middleware/auth';
 
 const router = express.Router();
 
 router.post('/login', userLogin);
 router.post('/signup', userSignup);
+router.post('/add-internal-user', addInternalUser)
 router.get('/profile', authenticate, getUserProfile);
 router.get('/list', getUserList);
 router.post('/forgot-password', forgotPassword);

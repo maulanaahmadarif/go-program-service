@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import { Sequelize } from 'sequelize';
 
 import { Company } from '../../models/Company';
+import { User } from '../../models/User';
 import { sendEmail } from '../services/mail';
 
 export const createCompany = async (req: Request, res: Response) => {
@@ -34,7 +36,22 @@ export const getCompanyList = async (req: Request, res: Response) => {
     const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
 
     const companies = await Company.findAll(
-      { order: [[sortField, orderDirection]] }
+      {
+        order: [[sortField, orderDirection]],
+        attributes: {
+          include: [
+            // Add a virtual field "userCount" to count the number of users in each company
+            [Sequelize.fn('COUNT', Sequelize.col('users.user_id')), 'total_users']
+          ]
+        },
+        include: [
+          {
+            model: User,
+            attributes: [], // Exclude user fields, we only want the count
+          },
+        ],
+        group: ['Company.company_id'],
+      }
     )
 
     res.status(200).json({ message: 'List of company', status: res.status, data: companies });

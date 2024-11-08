@@ -35,6 +35,7 @@ export interface UserAttributes {
   program_saled_id: string;
   phone_number?: string;
   job_title?: string;
+  level?: 'CUSTOMER' | 'INTERNAL';
   total_points?: number;
   accomplishment_total_points?: number;
   is_active?: boolean;
@@ -106,6 +107,10 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Default(false)
   @Column(DataType.BOOLEAN) // Specify data type
   public is_active?: boolean;
+
+  @Default('CUSTOMER')
+  @Column(DataType.ENUM('CUSTOMER', 'INTERNAL'))
+  public level!: 'CUSTOMER' | 'INTERNAL';
 
   @AllowNull(true)
   @Column(DataType.STRING(255)) // Specify data type

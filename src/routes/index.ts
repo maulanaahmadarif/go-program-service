@@ -8,6 +8,7 @@ import authRoutes from './auth';
 import projectRoutes from './project';
 import productRoutes from './product';
 import redeemRoutes from './redeem';
+import detailsRoutes from './details';
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.use('/auth', authRoutes);
 router.use('/project', projectRoutes);
 router.use('/product', productRoutes);
 router.use('/point', redeemRoutes);
+router.use('/details', detailsRoutes);
 
 export default router;

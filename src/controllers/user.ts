@@ -11,10 +11,10 @@ import { Company } from '../../models/Company';
 import { sendEmail } from '../services/mail';
 
 export const userLogin = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { email, password, level = 'CUSTOMER' } = req.body;
 
   try {
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email, level } });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -54,6 +54,50 @@ export const userLogin = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Something went wrong', error });
   }
 };
+
+export const addInternalUser = async (req: Request, res: Response) => {
+  try {
+    const {
+      email,
+      password,
+      username,
+      phone_number,
+      job_title,
+      user_type,
+      fullname,
+    } = req.body
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user in the database
+    const user = await User.create({
+      username,
+      company_id: 1,
+      email,
+      user_type,
+      password_hash: hashedPassword,
+      program_saled_id: 'admin',
+      phone_number,
+      job_title,
+      fullname,
+      level: 'INTERNAL',
+      is_active: true
+    });
+    // Return the created user
+    res.status(200).json({ user });
+  } catch (error: any) {
+    console.error('Error creating user:', error);
+
+    // Handle validation errors
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: 'Validation error', errors: error.errors });
+    }
+
+    // Handle database connection or other errors
+    return res.status(500).json({ message: 'An error occurred while creating the user' });
+  }
+}
 
 export const userSignup = async (req: Request, res: Response) => {
   const bonusSignupPoint = 400;
@@ -128,7 +172,7 @@ export const userSignup = async (req: Request, res: Response) => {
       .replace('{{userName}}', user.username)
       .replace('{{confirmationLink}}', `${process.env.APP_URL}/email-confirmation?token=${token}`)
 
-    await sendEmail({ to: user.email, subject: 'Welcome to The Lenovo Go Pro Program', html: htmlTemplate });
+    await sendEmail({ to: user.email, bcc: process.env.EMAIL_BCC, subject: 'Welcome to The Lenovo Go Pro Program', html: htmlTemplate });
 
     // Return the created user
     res.status(200).json({ user: userProfile });
@@ -192,12 +236,21 @@ export const getUserProfile = async (req: any, res: Response) => {
 
 export const getUserList = async (req: Request, res: Response) => {
   try {
+    const { company_id } = req.query;
+
+    const whereCondition: any = { level: 'CUSTOMER' };
+
+    if (company_id) {
+      whereCondition.company_id = company_id;
+    }
+
     const sortField: string = (req.query.sortBy as string) || 'total_points';
     const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
 
     const users = await User.findAll(
       {
-        attributes: { exclude: ['password_hash'] },
+        where: whereCondition,
+        attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
         order: [[sortField, orderDirection]]
       }
     )

@@ -61,7 +61,7 @@ export class Form extends Model<FormAttributes, FormCreationAttributes> {
   project_id!: number;
 
   @AllowNull(false)
-  @Default('pending')
+  @Default('approved')
   @IsIn([['pending', 'approved', 'rejected']])
   @Column(DataType.STRING(50))
   public status!: 'pending' | 'approved' | 'rejected';

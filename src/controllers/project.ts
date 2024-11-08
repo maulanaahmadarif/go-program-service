@@ -37,7 +37,9 @@ export const getProjectList = async (req: CustomRequest, res: Response) => {
   try {
     const projects = await Project.findAll(
       {
-        include: [{ model: Form }],
+        include: [
+          { model: Form, where: { status: 'approved' }, required: false }
+        ],
         where: { user_id: req.user?.userId },
         order: [['createdAt', 'DESC']]
       }

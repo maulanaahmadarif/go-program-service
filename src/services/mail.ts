@@ -16,6 +16,7 @@ interface EmailOptions {
   subject: string;
   text?: string;
   html?: string;
+  bcc?: string;
 }
 
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
@@ -26,7 +27,7 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
       subject: options.subject,
       text: options.text,
       html: options.html,
-      bcc: process.env.EMAIL_BCC
+      bcc: options.bcc
     };
 
     await transporter.sendMail(mailOptions);
