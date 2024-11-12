@@ -18,7 +18,7 @@ const router = express.Router();
 
 router.post('/login', userLogin);
 router.post('/signup', userSignup);
-router.post('/add-internal-user', addInternalUser)
+// router.post('/add-internal-user', addInternalUser)
 router.get('/profile', authenticate, getUserProfile);
 router.get('/list', getUserList);
 router.post('/forgot-password', forgotPassword);
