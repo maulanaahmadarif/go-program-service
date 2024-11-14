@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
+import dayjs from 'dayjs';
 
 import { User } from '../../models/User';
 import { Company } from '../../models/Company';
@@ -100,7 +101,16 @@ export const addInternalUser = async (req: Request, res: Response) => {
 }
 
 export const userSignup = async (req: Request, res: Response) => {
-  const bonusSignupPoint = 400;
+  let bonusSignupPoint = 0;
+
+  const currentDate = dayjs();
+
+  // Define the target comparison date
+  const targetDate = dayjs('2024-11-23');
+
+  if (currentDate.isBefore(targetDate, 'day')) {
+    bonusSignupPoint = 400;
+  }
 
   try {
     const {

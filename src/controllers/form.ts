@@ -105,11 +105,11 @@ export const deleteForm = async (req: Request, res: Response) => {
 
         if (user?.user_type === 'T2') {
           if (formsCount === 5) {
-            removedPoint += 200
+            removedPoint -= 200
           }
         } else if (user?.user_type === 'T1') {
           if (formsCount === 3) {
-            removedPoint += 200
+            removedPoint -= 200
           }
         }
 
