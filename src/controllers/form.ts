@@ -1,4 +1,7 @@
 import { Request, Response } from 'express';
+import dayjs from 'dayjs';
+import fs from 'fs';
+import path from 'path';
 
 import { FormType } from '../../models/FormType';
 import { Form } from '../../models/Form';
@@ -8,15 +11,17 @@ import { sequelize } from '../db';
 import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
 import { Project } from '../../models/Project';
+import { sendEmail } from '../services/mail';
 
 export const deleteForm = async (req: Request, res: Response) => {
   const form_id = req.params.form_id;
   const product_quantity = Number(req.query.product_quantity) || 0;
+  const reason = req.query.reason as string
 
   try {
     if (form_id) {
       const [numOfAffectedRows, updatedForms] = await Form.update(
-        { status: 'rejected' },
+        { status: 'rejected', note: reason },
         { where: { form_id }, returning: true }
       )
 
@@ -103,6 +108,7 @@ export const deleteForm = async (req: Request, res: Response) => {
           }
         }
 
+        // ! CHECK IF ONE OF FORM SUBMITTED BEFORE 14 DECEMBER 2024
         if (user?.user_type === 'T2') {
           if (formsCount === 5) {
             removedPoint -= 200
@@ -131,9 +137,18 @@ export const deleteForm = async (req: Request, res: Response) => {
           entity_type: 'FORM',
           action_type: req.method,
           form_id: Number(form_id),
+          note: reason,
           // ip_address: req.ip,
           // user_agent: req.get('User-Agent'),
         });
+
+        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'rejectEmail.html'), 'utf-8');
+
+        htmlTemplate = htmlTemplate
+          .replace('{{username}}', user!.username)
+          .replace('{{reason}}', reason)
+
+        await sendEmail({ to: user!.email, subject: 'Your Submission is Rejected!', html: htmlTemplate });
 
       } else {
         res.status(400).json({ message: 'No record found with the specified form_id.', status: res.status });
@@ -283,16 +298,22 @@ export const formSubmission = async (req: any, res: Response) => {
       }
     }
 
+    const currentDate = dayjs();
+
+    // Define the target comparison date
+    const targetDate = dayjs('2024-12-14');
   
-    if (user?.user_type === 'T2') {
-      if (formsCount === 6) {
-        additionalPoint += 200
-        isProjectFormCompleted = true;
-      }
-    } else if (user?.user_type === 'T1') {
-      if (formsCount === 4) {
-        additionalPoint += 200
-        isProjectFormCompleted = true;
+    if (currentDate.isBefore(targetDate, 'day')) {
+      if (user?.user_type === 'T2') {
+        if (formsCount === 6) {
+          additionalPoint += 200
+          isProjectFormCompleted = true;
+        }
+      } else if (user?.user_type === 'T1') {
+        if (formsCount === 4) {
+          additionalPoint += 200
+          isProjectFormCompleted = true;
+        }
       }
     }
 

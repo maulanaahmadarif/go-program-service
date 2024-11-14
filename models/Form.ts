@@ -30,6 +30,7 @@ export interface FormAttributes {
   project_id: number;
   status?: string;
   form_data: object,
+  note?: string,
   createdAt?: Date;
   updatedAt?: Date;  
 }
@@ -69,6 +70,10 @@ export class Form extends Model<FormAttributes, FormCreationAttributes> {
   @AllowNull(true)
   @Column(DataType.JSONB)
   public form_data?: object;
+
+  @AllowNull(true)
+  @Column(DataType.STRING)
+  public note?: string;
 
   // Timestamps
   @CreatedAt

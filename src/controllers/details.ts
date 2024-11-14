@@ -9,15 +9,18 @@ import { FormType } from '../../models/FormType';
 export const getProgramDetail = async (req: Request, res: Response) => {
   try {
     const totalCompany = await Company.count({
+      distinct: true,
       include: [
         {
           model: User,
+          attributes: [],
           where: {
             level: 'CUSTOMER',
           },
           required: true, // Ensures only companies with at least one associated user are counted
         },
       ],
+      col: 'company_id',
     });
     const totalUser = await User.count({ where: { level: 'CUSTOMER' } })
     const totalAccomplishmentPoint = await User.sum('accomplishment_total_points', { where: { level: 'CUSTOMER' } })

@@ -101,17 +101,6 @@ export const addInternalUser = async (req: Request, res: Response) => {
 }
 
 export const userSignup = async (req: Request, res: Response) => {
-  let bonusSignupPoint = 0;
-
-  const currentDate = dayjs();
-
-  // Define the target comparison date
-  const targetDate = dayjs('2024-11-23');
-
-  if (currentDate.isBefore(targetDate, 'day')) {
-    bonusSignupPoint = 400;
-  }
-
   try {
     const {
       email,
@@ -135,7 +124,7 @@ export const userSignup = async (req: Request, res: Response) => {
     let normalize_program_saled_id = program_saled_id;
 
     if (!company_id) {
-      const customCompany = await Company.create({ name: custom_company, industry: 'Custom Company' })
+      const customCompany = await Company.create({ name: custom_company, industry: 'Custom Company', total_points: 0 })
       normalize_company_id = customCompany.company_id;
       normalize_program_saled_id = `${program_saled_id}-0${customCompany.company_id}`
     }
@@ -150,8 +139,8 @@ export const userSignup = async (req: Request, res: Response) => {
       program_saled_id: normalize_program_saled_id,
       phone_number,
       job_title,
-      total_points: bonusSignupPoint,
-      accomplishment_total_points: bonusSignupPoint,
+      total_points: 0,
+      accomplishment_total_points: 0,
       fullname,
       token,
       token_purpose: 'EMAIL_CONFIRMATION',
@@ -172,7 +161,7 @@ export const userSignup = async (req: Request, res: Response) => {
     const company = await Company.findByPk(company_id);
 
     if (company) {
-      company.total_points = company.total_points as number + bonusSignupPoint;
+      company.total_points = company.total_points as number + 0;
       await company.save();
     }
 
@@ -310,6 +299,17 @@ export const forgotPassword = async (req: Request, res: Response) => {
 export const userSignupConfirmation = async (req: Request, res: Response) => {
   const { token } = req.params;
 
+  let bonusSignupPoint = 0;
+
+  const currentDate = dayjs();
+
+  // Define the target comparison date
+  const targetDate = dayjs('2024-11-23');
+
+  if (currentDate.isBefore(targetDate, 'day')) {
+    bonusSignupPoint = 400;
+  }
+
   try {
     const user = await User.findOne({
       where: {
@@ -329,7 +329,16 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
     user.token = null as any;
     user.token_purpose = null as any;
     user.token_expiration = null as any;
+    user.total_points = bonusSignupPoint;
+    user.accomplishment_total_points = bonusSignupPoint;
     await user.save();
+
+    const company = await Company.findByPk(user.company_id);
+
+    if (company) {
+      company.total_points = company.total_points as number + bonusSignupPoint;
+      await company.save();
+    }
 
     let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'welcomeEmail.html'), 'utf-8');
 

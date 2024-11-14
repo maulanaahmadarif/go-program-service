@@ -27,6 +27,7 @@ export interface UserAttributes {
   form_id?: number;
   redemption_id?: number;
   ip_address?: string;
+  note?: string;
   user_agent?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -73,6 +74,10 @@ export class UserAction extends Model<UserAttributes, UserCreationAttributes> {
   @AllowNull(true)
   @Column(DataTypes.TEXT)
   public user_agent?: string;
+
+  @AllowNull(true)
+  @Column(DataTypes.STRING)
+  public note?: string;
 
   // Timestamps
   @CreatedAt
