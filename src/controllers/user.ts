@@ -145,6 +145,7 @@ export const userSignup = async (req: Request, res: Response) => {
       token,
       token_purpose: 'EMAIL_CONFIRMATION',
       token_expiration: new Date(Date.now() + 3600000),
+      // token_expiration: new Date(Date.now() + 24 * 60 * 60 * 1000), ONE DAY
     });
 
     const userProfile = {
@@ -171,7 +172,7 @@ export const userSignup = async (req: Request, res: Response) => {
       .replace('{{userName}}', user.username)
       .replace('{{confirmationLink}}', `${process.env.APP_URL}/email-confirmation?token=${token}`)
 
-    await sendEmail({ to: user.email, bcc: process.env.EMAIL_BCC, subject: 'Welcome to The Lenovo Go Pro Program', html: htmlTemplate });
+    await sendEmail({ to: user.email, bcc: process.env.EMAIL_BCC, subject: 'Email Confirmation - Lenovo Go Pro Program', html: htmlTemplate });
 
     // Return the created user
     res.status(200).json({ user: userProfile });
@@ -237,7 +238,7 @@ export const getUserList = async (req: Request, res: Response) => {
   try {
     const { company_id } = req.query;
 
-    const whereCondition: any = { level: 'CUSTOMER' };
+    const whereCondition: any = { level: 'CUSTOMER', is_active: true };
 
     if (company_id) {
       whereCondition.company_id = company_id;
@@ -411,5 +412,39 @@ export const updateUser = async (req: any, res: Response) => {
   } catch (error) {
     console.error('Error updating user:', error);
     res.status(500).json({ message: 'Something went wrong' });
+  }
+}
+
+export const deleteUser = async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.user_id;
+    const user = await User.findByPk(userId)
+
+    if (user) {
+      const company = await Company.findByPk(user.company_id)
+      if (company) {
+        company.total_points = (company.total_points || 0) - (user.accomplishment_total_points || 0)
+        await company.save();
+      }
+      user.is_active = false;
+      user.total_points = 0;
+      user.accomplishment_total_points = 0;
+      await user.save();
+      res.status(200).json({ message: 'User deleted', status: res.status });
+      return;
+    } else {
+      return res.status(404).json({ message: 'User not found' });
+    }
+  } catch (error: any) {
+    console.error('Error delete user:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ message: 'Something went wrong', error });
   }
 }

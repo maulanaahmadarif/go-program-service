@@ -9,6 +9,7 @@ export interface CompanyAttributes {
   address?: string;
   industry: string;
   total_points?: number;
+  status?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -38,6 +39,10 @@ export class Company extends Model<CompanyAttributes, CompanyCreationAttributes>
   @Default(0)
   @Column(DataType.INTEGER) // Specify data type
   public total_points?: number;
+
+  @Default('active')
+  @Column(DataType.STRING) // Specify data type
+  public status?: string;
 
   // Timestamps
   @CreatedAt

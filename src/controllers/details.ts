@@ -10,22 +10,39 @@ export const getProgramDetail = async (req: Request, res: Response) => {
   try {
     const totalCompany = await Company.count({
       distinct: true,
+      where: {
+        status: 'active'
+      },
       include: [
         {
           model: User,
           attributes: [],
           where: {
             level: 'CUSTOMER',
+            is_active: true,
           },
           required: true, // Ensures only companies with at least one associated user are counted
         },
       ],
       col: 'company_id',
     });
-    const totalUser = await User.count({ where: { level: 'CUSTOMER' } })
+    const totalUser = await User.count({ where: { level: 'CUSTOMER', is_active: true } })
     const totalAccomplishmentPoint = await User.sum('accomplishment_total_points', { where: { level: 'CUSTOMER' } })
     const totalCompanyPoint = await Company.sum('total_points')
-    const totalFormSubmission = await Form.count({ where: { status: 'approved' } });
+    const totalFormSubmission = await Form.count({
+      where: { status: 'approved' },
+      include: [
+        {
+          model: User,
+          attributes: [],
+          where: {
+            level: 'CUSTOMER',
+            is_active: true,
+          },
+          required: true, // Ensures only companies with at least one associated user are counted
+        },
+      ]
+    });
 
     
     res.status(200).json({
