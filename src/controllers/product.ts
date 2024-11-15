@@ -10,7 +10,7 @@ interface CustomRequest extends Request {
 
 export const getProductList = async (req: CustomRequest, res: Response) => {
   try {
-    const products = await Product.findAll()
+    const products = await Product.findAll({ order: [['points_required', 'ASC']] })
 
     res.status(200).json({ message: 'List of products', status: res.status, data: products });
   } catch (error: any) {

@@ -8,6 +8,7 @@ import { User } from '../../models/User';
 import { UserAction } from '../../models/UserAction';
 import { sequelize } from '../db';
 import { sendEmail } from '../services/mail';
+import { Product } from '../../models/Product';
 
 interface CustomRequest extends Request {
   user?: {
@@ -35,10 +36,16 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     }, { transaction })
 
     const user = await User.findByPk(user_id, { transaction });
+    const product = await Product.findByPk(product_id, { transaction });
 
-    if (user) {
+    if (user && product) {
       user.total_points = (user.total_points || 0) - points_spent;
       await user.save({ transaction });
+    }
+
+    if (product) {
+      product.stock_quantity = (product.stock_quantity || 0) - 1;
+      await product.save({ transaction });
     }
 
     await UserAction.create({
@@ -55,12 +62,11 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
 
     htmlTemplate = htmlTemplate
-      .replace('{{redemptionDate}}', dayjs(redemption.createdAt).format('DD MM YYYY'))
-      .replace('{{redemptionItem}}', redemption.product.name)
+      .replace('{{redemptionDate}}', dayjs(redemption.createdAt).format('DD MMM YYYY'))
+      .replace('{{redemptionItem}}', product!.name)
       .replace('{{partnerName}}', fullname)
       .replace('{{email}}', email)
       .replace('{{phoneNumber}}', phone_number)
-      .replace('{{size}}', notes || '-')
       .replace('{{address}}', shipping_address)
       .replace('{{postalCode}}', postal_code)
       .replace('{{accomplishmentScore}}', String(user?.accomplishment_total_points ?? 'N/A'))
@@ -83,3 +89,31 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     res.status(500).json({ message: 'Something went wrong', error });
   }
 };
+
+export const redeemList = async (req: Request, res: Response) => {
+  try {
+    const list = await Redemption.findAll({
+      include: [
+        {
+          model: User,
+          attributes: ['username']
+        },
+        {
+          model: Product,
+        }
+      ]
+    });
+    res.status(200).json({ message: 'Redemption list', status: res.status, data: list });
+  } catch (error: any) {
+    console.error('Error delete user:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+}
