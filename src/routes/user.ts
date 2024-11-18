@@ -11,7 +11,8 @@ import {
   updateUser,
   userSignupConfirmation,
   addInternalUser,
-  deleteUser
+  deleteUser,
+  activateUser
 } from '../controllers/user';
 import authenticate from '../middleware/auth';
 
@@ -27,5 +28,6 @@ router.post('/reset-password', resetPassword);
 router.post('/update', authenticate, updateUser);
 router.get('/confirmation/:token', userSignupConfirmation)
 router.delete('/delete/:user_id', authenticate, deleteUser)
+router.post('/activate', authenticate, activateUser)
 
 export default router;

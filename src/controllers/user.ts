@@ -242,6 +242,7 @@ export const getUserList = async (req: Request, res: Response) => {
 
     if (company_id) {
       whereCondition.company_id = company_id;
+      delete whereCondition.is_active
     }
 
     const sortField: string = (req.query.sortBy as string) || 'total_points';
@@ -446,5 +447,43 @@ export const deleteUser = async (req: Request, res: Response) => {
 
     // Handle other types of errors
     res.status(500).json({ message: 'Something went wrong', error });
+  }
+}
+
+export const activateUser = async (req: Request, res: Response) => {
+  try {
+    const { user_id } = req.body;
+
+    let bonusSignupPoint = 0;
+
+    const currentDate = dayjs();
+
+    // Define the target comparison date
+    const targetDate = dayjs('2024-11-23');
+
+    if (currentDate.isBefore(targetDate, 'day')) {
+      bonusSignupPoint = 400;
+    }
+
+    // Update the user's email and password
+    const [updatedRowsCount] = await User.update(
+      {
+          is_active: true,
+          total_points: bonusSignupPoint,
+          accomplishment_total_points: bonusSignupPoint,
+      },
+      {
+          where: { user_id: user_id },
+      }
+    );
+
+    if (updatedRowsCount === 0) {
+      return res.status(400).json({ message: 'User not found or no changes made.' });
+    }
+
+    res.status(200).json({ message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ message: 'Something went wrong' });
   }
 }
