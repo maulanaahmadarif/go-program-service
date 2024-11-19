@@ -45,7 +45,7 @@ app.use('/api', router)
 app.set('trust proxy', true)
 
 // Sync all models with the database (creates tables if they don't exist)
-// sequelize.sync({ force: true })  // You can add an explicit type for syncDb parameter if needed
+// sequelize.sync({ alter: true })  // You can add an explicit type for syncDb parameter if needed
 //   .then(() => console.log('Tables created successfully!'))
 //   .catch((error: Error) => console.error('Error creating tables:', error));
 

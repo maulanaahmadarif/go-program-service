@@ -7,6 +7,7 @@ import { User } from '../../models/User';
 import { Form } from '../../models/Form';
 import { Project } from '../../models/Project';
 import { FormType } from '../../models/FormType';
+import { formatJsonToLabelValueString } from '../utils';
 
 export const getProgramDetail = async (req: Request, res: Response) => {
   try {
@@ -132,9 +133,15 @@ export const getProjectList = async (req: Request, res: Response) => {
 
 export const getAllDataDownload = async (req: Request, res: Response) => {
   try {
-    
+    const { company_id } = req.query;
+
+    const whereCondition: any = { status: 'active' };
+
+    if (company_id) {
+      whereCondition.company_id = company_id;
+    }
     const datas = await Company.findAll({
-      where: { status: 'active' },
+      where: whereCondition,
       include: [
         {
           model: User,  // Include related Users
@@ -220,7 +227,7 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
                   label: item.label,
                   value: item.value
                 }))
-                milestones[i] = labelValue;
+                milestones[i] = formatJsonToLabelValueString(labelValue);
               }
             }
           }
@@ -234,7 +241,7 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
                   label: item.label,
                   value: item.value
                 }))
-                milestones[i] = labelValue;
+                milestones[i] = formatJsonToLabelValueString(labelValue);
               }
             }
           }
@@ -269,7 +276,7 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
                     label: item.label,
                     value: item.value
                   }))
-                  milestonesProject[i] = labelValue;
+                  milestonesProject[i] = formatJsonToLabelValueString(labelValue);
                 }
               }
             }
@@ -283,7 +290,7 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
                     label: item.label,
                     value: item.value
                   }))
-                  milestonesProject[i] = labelValue;
+                  milestonesProject[i] = formatJsonToLabelValueString(labelValue);
                 }
               }
             }
