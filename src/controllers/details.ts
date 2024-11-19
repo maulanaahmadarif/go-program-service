@@ -167,11 +167,26 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
     });
 
     const workbook = new ExcelJS.Workbook();
-    
+
+    const worksheetNames = new Set();
 
     // Step 4: Add data to the worksheet, including HTML as text
     datas.forEach((item, index) => {
-      const worksheet = workbook.addWorksheet(item.name);
+      let sheetName = item.name.toLowerCase();
+
+      // Ensure the sheet name is unique
+      let uniqueSheetName = sheetName;
+      let counter = 1;
+      while (worksheetNames.has(uniqueSheetName)) {
+        uniqueSheetName = `${sheetName}(${counter})`; // Add a counter to the sheet name
+        counter++;
+      }
+
+      // Add the unique sheet name to the set
+      worksheetNames.add(uniqueSheetName);
+
+      // Create the worksheet with the unique name
+      const worksheet = workbook.addWorksheet(uniqueSheetName);
 
       worksheet.columns = [
         { header: 'Username', key: 'username', width: 10 },
