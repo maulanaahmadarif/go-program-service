@@ -1,11 +1,13 @@
 import express from 'express';
-import bodyParser from 'body-parser';
+import { Request, Response, NextFunction } from 'express';
+import bodyParser, { json } from 'body-parser';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'path';
 
 import { sequelize } from './db';
 import router from './routes';
+import multer, { MulterError } from 'multer';
 
 // Load environment variables
 dotenv.config();
@@ -43,6 +45,23 @@ app.use(cors(corsOptions));
 app.use(express.static(path.join(process.cwd(), 'public')));
 app.use('/api', router)
 app.set('trust proxy', true)
+
+// Error handler for Multer (file size limit exceeded or other errors)
+app.use((err: MulterError, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof multer.MulterError) {
+    // Check for file size limit error
+    console.log('err.code ', err.code);
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        message: 'File size exceeds the 10 MB limit. Please upload a smaller file.',
+      });
+    }
+    // Handle other Multer-related errors
+    return res.status(400).json({ message: `Multer error: ${err.message}` });
+  }
+  // Handle generic errors
+  res.status(500).send({ json: 'Something went wrong!' });
+});
 
 // Sync all models with the database (creates tables if they don't exist)
 // sequelize.sync({ alter: true })  // You can add an explicit type for syncDb parameter if needed
