@@ -39,10 +39,14 @@ export const getCompanyList = async (req: Request, res: Response) => {
 
     const companies = await Company.findAll(
       {
-        order: [[sortField, orderDirection]],
+        order: [[
+          Sequelize.literal('total_company_points'), // Order by the virtual field
+          orderDirection,
+        ]],
         attributes: {
           include: [
             // Add a virtual field "userCount" to count the number of users in each company
+            [Sequelize.fn('SUM', Sequelize.col('users.accomplishment_total_points')), 'total_company_points'],
             [Sequelize.fn('COUNT', Sequelize.col('users.user_id')), 'total_users']
           ]
         },
@@ -89,6 +93,7 @@ export const getCompanyDetail = async (req: Request, res: Response) => {
       attributes: {
         include: [
           // Add a virtual field "userCount" to count the number of users in each company
+          [Sequelize.fn('SUM', Sequelize.col('users.accomplishment_total_points')), 'total_company_points'],
           [
             Sequelize.fn('COUNT', Sequelize.literal("CASE WHEN users.is_active = true THEN 1 END")),
             'total_users'

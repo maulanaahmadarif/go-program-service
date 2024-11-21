@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Model, Sequelize } from 'sequelize';
+import { Model, Sequelize, where } from 'sequelize';
 import ExcelJS from 'exceljs'
 
 import { Company } from '../../models/Company';
@@ -31,8 +31,8 @@ export const getProgramDetail = async (req: Request, res: Response) => {
       col: 'company_id',
     });
     const totalUser = await User.count({ where: { level: 'CUSTOMER', is_active: true } })
-    const totalAccomplishmentPoint = await User.sum('accomplishment_total_points', { where: { level: 'CUSTOMER' } })
-    const totalCompanyPoint = await Company.sum('total_points')
+    const totalAccomplishmentPoint = await User.sum('accomplishment_total_points', { where: { level: 'CUSTOMER', is_active: true } })
+    // const totalCompanyPoint = await Company.sum('total_points', { where: { status: 'active' } })
     const totalFormSubmission = await Form.count({
       where: { status: 'approved' },
       include: [
@@ -56,7 +56,7 @@ export const getProgramDetail = async (req: Request, res: Response) => {
         total_company: totalCompany,
         total_user: totalUser,
         total_accomplishment_point: totalAccomplishmentPoint,
-        total_company_point: totalCompanyPoint,
+        // total_company_point: totalCompanyPoint,
         total_form_submission : totalFormSubmission,
       }
     });
