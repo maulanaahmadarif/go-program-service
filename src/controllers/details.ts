@@ -176,46 +176,30 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
 
     const workbook = new ExcelJS.Workbook();
 
-    const worksheetNames = new Set();
+    const worksheet = workbook.addWorksheet('All Data');
+
+    worksheet.columns = [
+      { header: 'Company', key: 'company', width: 10 },
+      { header: 'Username', key: 'username', width: 10 },
+      { header: 'Full Name', key: 'fullname', width: 20 },
+      { header: 'Job', key: 'job', width: 30 },
+      { header: 'Email', key: 'email', width: 15 },
+      { header: 'User Type', key: 'user_type', width: 15 },
+      { header: 'Total Point', key: 'total_point', width: 50 },
+      { header: 'Accomplishment Point', key: 'accomplishment_point', width: 50 },
+      { header: 'Phone Number', key: 'phone', width: 50 },
+      { header: 'Project', key: 'project_name', width: 50 },
+      { header: 'Date Submission', key: 'created_at', width: 10 },
+      { header: 'Milestone 1', key: 'milestone1', width: 50 },
+      { header: 'Milestone 2', key: 'milestone2', width: 50 },
+      { header: 'Milestone 3', key: 'milestone3', width: 50 },
+      { header: 'Milestone 4', key: 'milestone4', width: 50 },
+      { header: 'Milestone 5', key: 'milestone5', width: 50 },
+      { header: 'Milestone 6', key: 'milestone6', width: 50 },
+    ];
 
     // Step 4: Add data to the worksheet, including HTML as text
     datas.forEach((item, index) => {
-      let sheetName = item.name.toLowerCase();
-
-      // Ensure the sheet name is unique
-      let uniqueSheetName = sheetName;
-      let counter = 1;
-      while (worksheetNames.has(uniqueSheetName)) {
-        uniqueSheetName = `${sheetName}(${counter})`; // Add a counter to the sheet name
-        counter++;
-      }
-
-      // Add the unique sheet name to the set
-      worksheetNames.add(uniqueSheetName);
-
-      // Create the worksheet with the unique name
-      const worksheet = workbook.addWorksheet(uniqueSheetName);
-
-      worksheet.columns = [
-        { header: 'Company', key: 'company', width: 10 },
-        { header: 'Username', key: 'username', width: 10 },
-        { header: 'Full Name', key: 'fullname', width: 20 },
-        { header: 'Job', key: 'job', width: 30 },
-        { header: 'Email', key: 'email', width: 15 },
-        { header: 'User Type', key: 'user_type', width: 15 },
-        { header: 'Total Point', key: 'total_point', width: 50 },
-        { header: 'Accomplishment Point', key: 'accomplishment_point', width: 50 },
-        { header: 'Phone Number', key: 'phone', width: 50 },
-        { header: 'Project', key: 'project_name', width: 50 },
-        { header: 'Date Submission', key: 'created_at', width: 10 },
-        { header: 'Milestone 1', key: 'milestone1', width: 50 },
-        { header: 'Milestone 2', key: 'milestone2', width: 50 },
-        { header: 'Milestone 3', key: 'milestone3', width: 50 },
-        { header: 'Milestone 4', key: 'milestone4', width: 50 },
-        { header: 'Milestone 5', key: 'milestone5', width: 50 },
-        { header: 'Milestone 6', key: 'milestone6', width: 50 },
-      ];
-
       item.users.forEach((user) => {
 
         const milestones = new Array(6).fill(null);
