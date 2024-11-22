@@ -153,12 +153,12 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
           include: [
             {
               model: Project,  // Include related Forms
-              attributes: ['name'],
+              attributes: ['name', 'createdAt'],
               include: [
                 {
                   model: Form,
                   where: { status: 'approved' },
-                  attributes: ['form_data', 'status'],
+                  attributes: ['form_data', 'status', 'createdAt'],
                   required: true,
                   include: [
                     {
@@ -189,7 +189,7 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
       { header: 'Accomplishment Point', key: 'accomplishment_point', width: 50 },
       { header: 'Phone Number', key: 'phone', width: 50 },
       { header: 'Project', key: 'project_name', width: 50 },
-      { header: 'Date Submission', key: 'created_at', width: 10 },
+      { header: 'Project Created', key: 'created_at', width: 10 },
       { header: 'Milestone 1', key: 'milestone1', width: 50 },
       { header: 'Milestone 2', key: 'milestone2', width: 50 },
       { header: 'Milestone 3', key: 'milestone3', width: 50 },
@@ -251,7 +251,7 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
           accomplishment_point: user.accomplishment_total_points,
           phone: user.phone_number,
           project_name: user?.project[0]?.name,
-          created_at: dayjs(user?.project[0]?.createdAt).format('DD MMM YYYY HH:mm'),
+          created_at: user?.project[0]?.createdAt ? dayjs(user?.project[0]?.createdAt).format('DD MMM YYYY HH:mm') : '',
           milestone1: milestones[0],
           milestone2: milestones[1],
           milestone3: milestones[2],
@@ -316,10 +316,10 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=users_with_html.xlsx');
 
-    // Step 6: Write the Excel file to the response
+    // // Step 6: Write the Excel file to the response
     await workbook.xlsx.write(res);
 
-    // End the response
+    // // End the response
     res.end();
     // res.json(datas);
   } catch (error: any) {
