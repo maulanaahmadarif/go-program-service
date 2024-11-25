@@ -236,13 +236,17 @@ export const getUserProfile = async (req: any, res: Response) => {
 
 export const getUserList = async (req: Request, res: Response) => {
   try {
-    const { company_id } = req.query;
+    const { company_id, user_type } = req.query;
 
     const whereCondition: any = { level: 'CUSTOMER', is_active: true };
 
     if (company_id) {
       whereCondition.company_id = company_id;
       delete whereCondition.is_active
+    }
+
+    if (user_type) {
+      whereCondition.user_type = user_type
     }
 
     const sortField: string = (req.query.sortBy as string) || 'total_points';
