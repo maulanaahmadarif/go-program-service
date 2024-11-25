@@ -34,6 +34,7 @@ export const deleteForm = async (req: Request, res: Response) => {
 
         const user = await User.findByPk(updatedForm.user_id);
         const company = await Company.findByPk(user?.company_id);
+        const project = await Project.findByPk(updatedForm.project_id);
         const formType = await FormType.findByPk(updatedForm.form_type_id);
         const formsCount = await Form.count(
           {
@@ -149,6 +150,8 @@ export const deleteForm = async (req: Request, res: Response) => {
 
         htmlTemplate = htmlTemplate
           .replace('{{username}}', user!.username)
+          .replace('{{project}}', project!.name)
+          .replace('{{milestone}}', formType!.form_name)
           .replace('{{reason}}', reason)
 
         await sendEmail({ to: user!.email, subject: 'Your Submission is Rejected!', html: htmlTemplate });

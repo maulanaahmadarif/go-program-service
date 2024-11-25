@@ -32,6 +32,7 @@ export interface RedemptionAttributes {
   points_spent: number;
   fullname: string;
   email: string;
+  status: string;
   phone_number: string;
   shipping_address: string;
   postal_code: string;
@@ -88,6 +89,11 @@ export class Redemption extends Model<RedemptionAttributes, RedemptionCreationAt
   @AllowNull(true)
   @Column(DataType.TEXT)
   public notes?: string;
+
+  @AllowNull(false)
+  @Default('active')
+  @Column(DataType.STRING(255))
+  public status!: string;
 
   // Timestamps
   @CreatedAt
