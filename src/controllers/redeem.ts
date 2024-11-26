@@ -36,7 +36,13 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       status: 'active'
     }, { transaction })
 
+    const user = await User.findByPk(user_id, { transaction });
     const product = await Product.findByPk(product_id, { transaction });
+
+    if (user && product) {
+      user.total_points = (user.total_points || 0) - points_spent;
+      await user.save({ transaction });
+    }
 
     if (product) {
       product.stock_quantity = (product.stock_quantity || 0) - 1;
@@ -121,10 +127,12 @@ export const rejectRedeem = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Product data not found' });
     }
 
+    user.total_points = (user.total_points || 0) + redeemDetail.points_spent;
     redeemDetail.status = 'rejected'
     productDetail.stock_quantity = (productDetail.stock_quantity || 0) + 1;
 
     await redeemDetail.save({ transaction });
+    await user.save({ transaction });
     await productDetail.save({ transaction });
 
     await transaction.commit();
@@ -174,11 +182,9 @@ export const approveRedeem = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Product data not found' });
     }
 
-    user.total_points = (user.total_points || 0) - redeemDetail.points_spent;
     redeemDetail.status = 'approved'
 
     await redeemDetail.save({ transaction });
-    await user.save({ transaction });
 
     let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
 
