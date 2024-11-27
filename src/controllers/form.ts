@@ -14,7 +14,7 @@ import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
 import { Project } from '../../models/Project';
 import { sendEmail } from '../services/mail';
-import { formatJsonToLabelValueString } from '../utils';
+import { formatJsonToLabelValueString, getUserType } from '../utils';
 
 export const deleteForm = async (req: Request, res: Response) => {
   const form_id = req.params.form_id;
@@ -427,7 +427,7 @@ export const getFormSubmission = async (req: Request, res: Response) => {
       include: [
         {
           model: User,
-          attributes: ['username'],
+          attributes: ['username', 'user_type'],
           required: true,
           where: userWhere,
           include: [
@@ -500,7 +500,7 @@ export const downloadSubmission = async (req: Request, res: Response) => {
       include: [
         {
           model: User,
-          attributes: ['username'],
+          attributes: ['username', 'user_type'],
           required: true,
           where: userWhere,
           include: [
@@ -532,6 +532,7 @@ export const downloadSubmission = async (req: Request, res: Response) => {
     worksheet.columns = [
       { header: 'Company', key: 'company', width: 10 },
       { header: 'Username', key: 'username', width: 10 },
+      { header: 'User Type', key: 'user_type', width: 10 },
       { header: 'Project', key: 'project', width: 20 },
       { header: 'Milestone', key: 'milestone', width: 30 },
       { header: 'Submitted At', key: 'created_at', width: 15 },
@@ -545,6 +546,7 @@ export const downloadSubmission = async (req: Request, res: Response) => {
       worksheet.addRow({
         company: item.user.company?.name,
         username: item.user.username,
+        user_type: getUserType(item.user.user_type),
         project: item.project.name,
         milestone: item.form_type.form_name,
         created_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
