@@ -31,6 +31,7 @@ export const deleteForm = async (req: Request, res: Response) => {
       if (numOfAffectedRows > 0) {
         const updatedForm = updatedForms[0]; // Access the first updated record
         let removedPoint = 0;
+        let removedCompletedPoint = 0;
 
         const user = await User.findByPk(updatedForm.user_id);
         const company = await Company.findByPk(user?.company_id);
@@ -115,22 +116,22 @@ export const deleteForm = async (req: Request, res: Response) => {
         // ! CHECK IF ONE OF FORM SUBMITTED BEFORE 14 DECEMBER 2024
         if (user?.user_type === 'T2') {
           if (formsCount === 5) {
-            removedPoint -= 200
+            removedCompletedPoint = 200
           }
         } else if (user?.user_type === 'T1') {
           if (formsCount === 3) {
-            removedPoint -= 200
+            removedCompletedPoint = 200
           }
         }
 
         if (user && formType) {
-          user.total_points = (user.total_points || 0) - formType.point_reward - removedPoint; // Assuming `points` field exists on User
-          user.accomplishment_total_points = (user.accomplishment_total_points || 0) - formType.point_reward - removedPoint;
+          user.total_points = (user.total_points || 0) - formType.point_reward - removedPoint - removedCompletedPoint; // Assuming `points` field exists on User
+          user.accomplishment_total_points = (user.accomplishment_total_points || 0) - formType.point_reward - removedPoint - removedCompletedPoint;
           await user.save();
         }
     
         if (company && formType) {
-          company.total_points = (company.total_points || 0) - formType.point_reward - removedPoint; // Assuming `points` field exists on User
+          company.total_points = (company.total_points || 0) - formType.point_reward - removedPoint - removedCompletedPoint; // Assuming `points` field exists on User
           await company.save();
         }
     
