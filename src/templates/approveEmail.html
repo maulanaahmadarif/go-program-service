@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Form Rejection Notification</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f7fc;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h2 {
+      color: #65a30d
+    }
+    .content {
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .highlight {
+      font-weight: bold;
+      color: #ff4d4f;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 12px;
+      color: #777;
+    }
+    .footer a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <h2>Form Submission Approved</h2>
+    </div>
+
+    <div class="content">
+      <p>Hi <span class="highlight">{{username}}</span>,</p>
+      <p>Congratulations! Your submission is approved by the Lenovo Go Pro Program team.</p>
+
+      <p>Thank you for your participation. <br/>Let's work on another project, earn points as much as possible, and get the rewards in the Lenovo Go Pro Program!</p>
+
+      <p>
+        Good luck and cheers, Lenovo Go Pro Program
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>Best regards, <br> Lenovo Go Pro Program</p>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -35,7 +35,6 @@ export const getProgramDetail = async (req: Request, res: Response) => {
     const totalAccomplishmentPoint = await User.sum('accomplishment_total_points', { where: { level: 'CUSTOMER', is_active: true } })
     // const totalCompanyPoint = await Company.sum('total_points', { where: { status: 'active' } })
     const totalFormSubmission = await Form.count({
-      where: { status: 'approved' },
       include: [
         {
           model: User,
@@ -105,7 +104,7 @@ export const getProjectList = async (req: Request, res: Response) => {
         include: [
           {
             model: Form,
-            where: { status: { [Op.or]: ['approved', 'rejected'] } },
+            where: { status: { [Op.or]: ['approved', 'rejected', 'submitted'] } },
             include: [
               {
                 model: FormType, // Nested include to get each User's Profile
@@ -114,7 +113,9 @@ export const getProjectList = async (req: Request, res: Response) => {
           },
         ],
         where: { user_id: req.params.userId },
-        order: [['createdAt', 'DESC']]
+        order: [
+          ['createdAt', 'DESC'], // Order projects by createdAt
+        ],
       }
     )
 
@@ -158,7 +159,6 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
               include: [
                 {
                   model: Form,
-                  where: { status: 'approved' },
                   attributes: ['form_data', 'status', 'createdAt'],
                   required: true,
                   include: [

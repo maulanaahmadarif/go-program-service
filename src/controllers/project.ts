@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 
 import { Project } from '../../models/Project';
 import { Form } from '../../models/Form';
@@ -70,7 +71,7 @@ export const getProjectList = async (req: CustomRequest, res: Response) => {
     const projects = await Project.findAll(
       {
         include: [
-          { model: Form, where: { status: 'approved' }, required: false }
+          { model: Form, where: { status: { [Op.or]: ['approved', 'submitted'] } }, required: false }
         ],
         where: { user_id: req.user?.userId },
         order: [['createdAt', 'DESC']]

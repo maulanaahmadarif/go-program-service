@@ -16,28 +16,25 @@ import { Project } from '../../models/Project';
 import { sendEmail } from '../services/mail';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 
-export const deleteForm = async (req: Request, res: Response) => {
+export const approveSubmission = async (req: any, res: Response) => {
   const form_id = req.params.form_id;
-  const product_quantity = Number(req.query.product_quantity) || 0;
-  const reason = req.query.reason as string
+  const product_quantity = Number(req.body.product_quantity) || 0;
 
   try {
     if (form_id) {
       const [numOfAffectedRows, updatedForms] = await Form.update(
-        { status: 'rejected', note: reason },
+        { status: 'approved' },
         { where: { form_id }, returning: true }
       )
 
       if (numOfAffectedRows > 0) {
         const updatedForm = updatedForms[0]; // Access the first updated record
-        let removedPoint = 0;
-        let removedCompletedPoint = 0;
+        let additionalPoint = 0;
 
         const user = await User.findByPk(updatedForm.user_id);
         const company = await Company.findByPk(user?.company_id);
-        const project = await Project.findByPk(updatedForm.project_id);
         const formType = await FormType.findByPk(updatedForm.form_type_id);
-        const formsCount = await Form.count(
+        const formsCount = await Form.findAll(
           {
             where: {
               user_id: user?.user_id,
@@ -49,92 +46,154 @@ export const deleteForm = async (req: Request, res: Response) => {
         
         if (updatedForm.form_type_id === 1) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 10
+            additionalPoint = 10
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 20
+            additionalPoint = 20
           } else if (product_quantity > 300) {
-            removedPoint = 40
+            additionalPoint = 40
           }
         } else if (updatedForm.form_type_id === 4) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 20
+            additionalPoint = 20
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 50
+            additionalPoint = 50
           } else if (product_quantity > 300) {
-            removedPoint = 100
+            additionalPoint = 100
           }
         } else if (updatedForm.form_type_id === 5) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 50
+            additionalPoint = 50
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 100
+            additionalPoint = 100
           } else if (product_quantity > 300) {
-            removedPoint = 200
+            additionalPoint = 200
           }
         } else if (updatedForm.form_type_id === 6) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 100
+            additionalPoint = 100
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 200
+            additionalPoint = 200
           } else if (product_quantity > 300) {
-            removedPoint = 400
+            additionalPoint = 400
           }
         } else if (updatedForm.form_type_id === 7) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 5
+            additionalPoint = 5
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 10
+            additionalPoint = 10
           } else if (product_quantity > 300) {
-            removedPoint = 20
+            additionalPoint = 20
           }
         } else if (updatedForm.form_type_id === 8) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 10
+            additionalPoint = 10
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 25
+            additionalPoint = 25
           } else if (product_quantity > 300) {
-            removedPoint = 50
+            additionalPoint = 50
           }
         } else if (updatedForm.form_type_id === 9) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 25
+            additionalPoint = 25
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 50
+            additionalPoint = 50
           } else if (product_quantity > 300) {
-            removedPoint = 100
+            additionalPoint = 100
           }
         } else if (updatedForm.form_type_id === 10) {
           if (product_quantity >= 1 && product_quantity <= 50) {
-            removedPoint = 50
+            additionalPoint = 50
           } else if (product_quantity > 50 && product_quantity <= 300) {
-            removedPoint = 100
+            additionalPoint = 100
           } else if (product_quantity > 300) {
-            removedPoint = 200
+            additionalPoint = 200
           }
         }
 
-        // ! CHECK IF ONE OF FORM SUBMITTED BEFORE 14 DECEMBER 2024
-        if (user?.user_type === 'T2') {
-          if (formsCount === 5) {
-            removedCompletedPoint = 200
-          }
-        } else if (user?.user_type === 'T1') {
-          if (formsCount === 3) {
-            removedCompletedPoint = 200
+        const currentDate = dayjs();
+        const targetDate = dayjs('2024-12-14');
+  
+        if (currentDate.isBefore(targetDate, 'day')) {
+          if (user?.user_type === 'T2') {
+            if (formsCount.length === 6) {
+              additionalPoint += 200
+            }
+          } else if (user?.user_type === 'T1') {
+            if (formsCount.length === 4) {
+              additionalPoint += 200
+            }
           }
         }
 
         if (user && formType) {
-          user.total_points = (user.total_points || 0) - formType.point_reward - removedPoint - removedCompletedPoint; // Assuming `points` field exists on User
-          user.accomplishment_total_points = (user.accomplishment_total_points || 0) - formType.point_reward - removedPoint - removedCompletedPoint;
+          user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
+          user.accomplishment_total_points = (user.accomplishment_total_points || 0) + formType.point_reward + additionalPoint;
           await user.save();
         }
     
         if (company && formType) {
-          company.total_points = (company.total_points || 0) - formType.point_reward - removedPoint - removedCompletedPoint; // Assuming `points` field exists on User
+          company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
           await company.save();
         }
     
+        // await logAction(userId, req.method, 1, 'FORM', req.ip, req.get('User-Agent'));
+    
+        await UserAction.create({
+          user_id: user!.user_id,
+          entity_type: 'FORM',
+          action_type: req.method,
+          form_id: Number(form_id),
+          // ip_address: req.ip,
+          // user_agent: req.get('User-Agent'),
+        });
+
+        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
+        let subjectEmail = 'Congratulations! Your Submission is Approved'
+
+        htmlTemplate = htmlTemplate
+          .replace('{{username}}', user!.username)
+
+        await sendEmail({ to: user!.email, subject: subjectEmail, html: htmlTemplate });
+
+      } else {
+        res.status(400).json({ message: 'No record found with the specified form_id.', status: res.status });
+      }
+      
+      res.status(200).json({ message: 'Form approved', status: res.status });
+    } else {
+      res.status(400).json({ message: 'Form failed to approve', status: res.status });
+    }
+  } catch (error: any) {
+    console.error('Error creating form type:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+};
+
+export const deleteForm = async (req: Request, res: Response) => {
+  const form_id = req.params.form_id;
+  const reason = req.query.reason as string
+
+  try {
+    if (form_id) {
+      const [numOfAffectedRows, updatedForms] = await Form.update(
+        { status: 'rejected', note: reason },
+        { where: { form_id }, returning: true }
+      )
+
+      if (numOfAffectedRows > 0) {
+        const updatedForm = updatedForms[0]; // Access the first updated record
+
+        const user = await User.findByPk(updatedForm.user_id);
+        const project = await Project.findByPk(updatedForm.project_id);
+        const formType = await FormType.findByPk(updatedForm.form_type_id);
         // await logAction(userId, req.method, 1, 'FORM', req.ip, req.get('User-Agent'));
     
         await UserAction.create({
@@ -209,7 +268,6 @@ export const formSubmission = async (req: any, res: Response) => {
   const transaction = await sequelize.transaction();
 
   const userId = req.user?.userId;
-  const companyId = req.user?.companyId;
   let isProjectFormCompleted = false;
   
   try {
@@ -218,92 +276,21 @@ export const formSubmission = async (req: any, res: Response) => {
       form_type_id,
       form_data,
       project_id,
-      status: 'approved'
+      status: 'submitted'
     })
 
     // Update user points based on the form submission
-    const company = await Company.findByPk(companyId, { transaction });
     const user = await User.findByPk(userId, { transaction });
-    const formType = await FormType.findByPk(form_type_id, { transaction });
     const formsCount = await Form.count(
       {
         where: {
           user_id: userId,
           project_id: project_id,
-          status: 'approved'
+          status: 'submitted'
         },
         transaction
       }
     )
-
-    let additionalPoint = 0;
-    if (formType) {
-      if (formType.form_type_id === 1) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 10
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 20
-        } else if (product_quantity > 300) {
-          additionalPoint = 40
-        }
-      } else if (formType.form_type_id === 4) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 20
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 50
-        } else if (product_quantity > 300) {
-          additionalPoint = 100
-        }
-      } else if (formType.form_type_id === 5) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 50
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 100
-        } else if (product_quantity > 300) {
-          additionalPoint = 200
-        }
-      } else if (formType.form_type_id === 6) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 100
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 200
-        } else if (product_quantity > 300) {
-          additionalPoint = 400
-        }
-      } else if (formType.form_type_id === 7) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 5
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 10
-        } else if (product_quantity > 300) {
-          additionalPoint = 20
-        }
-      } else if (formType.form_type_id === 8) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 10
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 25
-        } else if (product_quantity > 300) {
-          additionalPoint = 50
-        }
-      } else if (formType.form_type_id === 9) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 25
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 50
-        } else if (product_quantity > 300) {
-          additionalPoint = 100
-        }
-      } else if (formType.form_type_id === 10) {
-        if (product_quantity >= 1 && product_quantity <= 50) {
-          additionalPoint = 50
-        } else if (product_quantity > 50 && product_quantity <= 300) {
-          additionalPoint = 100
-        } else if (product_quantity > 300) {
-          additionalPoint = 200
-        }
-      }
-    }
 
     const currentDate = dayjs();
 
@@ -313,26 +300,13 @@ export const formSubmission = async (req: any, res: Response) => {
     if (currentDate.isBefore(targetDate, 'day')) {
       if (user?.user_type === 'T2') {
         if (formsCount === 6) {
-          additionalPoint += 200
           isProjectFormCompleted = true;
         }
       } else if (user?.user_type === 'T1') {
         if (formsCount === 4) {
-          additionalPoint += 200
           isProjectFormCompleted = true;
         }
       }
-    }
-
-    if (user && formType) {
-      user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
-      user.accomplishment_total_points = (user.accomplishment_total_points || 0) + formType.point_reward + additionalPoint;
-      await user.save({ transaction });
-    }
-
-    if (company && formType) {
-      company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
-      await company.save({ transaction });
     }
 
     // await logAction(userId, req.method, 1, 'FORM', req.ip, req.get('User-Agent'));
@@ -340,7 +314,7 @@ export const formSubmission = async (req: any, res: Response) => {
     await UserAction.create({
       user_id: userId,
       entity_type: 'FORM',
-      action_type: req.method,
+      action_type: 'SUBMITTED',
       form_id: submission.form_id,
       // ip_address: req.ip,
       // user_agent: req.get('User-Agent'),
@@ -374,7 +348,9 @@ export const getFormByProject = async (req: any, res: Response) => {
         where: {
           user_id: userId,
           project_id: projectId,
-          status: 'approved'
+          status: {
+            [Op.or]: ['approved', 'submitted']
+          }
         }
       }
     )
