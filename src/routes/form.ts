@@ -1,7 +1,7 @@
 import express from 'express';
 
 // import authenticate from '../middleware/auth';
-import { createFormType, formSubmission, getFormByProject, deleteForm, getFormSubmission, downloadSubmission, approveSubmission } from '../controllers/form';
+import { createFormType, formSubmission, getFormByProject, deleteForm, getFormSubmission, downloadSubmission, approveSubmission, getReport } from '../controllers/form';
 import authenticate from '../middleware/auth';
 
 const router = express.Router();
@@ -13,5 +13,6 @@ router.delete('/delete/:form_id', authenticate, deleteForm);
 router.get('/submission', authenticate, getFormSubmission);
 router.post('/approve/:form_id', authenticate, approveSubmission);
 router.get('/submission/download', authenticate, downloadSubmission)
+router.get('/submission/report', getReport)
 
 export default router;

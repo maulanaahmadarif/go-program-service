@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import { Sequelize } from 'sequelize';
+import ExcelJS from 'exceljs'
 
 import { Company } from '../../models/Company';
 import { sequelize } from '../db';
 import { User } from '../../models/User';
 import { sendEmail } from '../services/mail';
+import dayjs from 'dayjs';
 
 export const createCompany = async (req: Request, res: Response) => {
   const { name, address, industry } = req.body;
@@ -66,6 +68,41 @@ export const getCompanyList = async (req: Request, res: Response) => {
         group: ['Company.company_id'],
       }
     )
+
+    // const workbook = new ExcelJS.Workbook();
+        
+    // const worksheet = workbook.addWorksheet('submissions');
+
+    // worksheet.columns = [
+    //   { header: 'No', key: 'no', width: 10 },
+    //   { header: 'Company Name', key: 'company', width: 10 },
+    //   { header: 'Total Points', key: 'total_company_points', width: 10 },
+    //   { header: 'User List', key: 'usernames', width: 10 },
+    //   { header: 'Created At', key: 'created_at', width: 15 },
+    // ];
+
+    // // Step 4: Add data to the worksheet, including HTML as text
+    // companies.forEach((item, index) => {
+    //   const users = 
+    //   // Create the worksheet with the unique name
+    //   worksheet.addRow({
+    //     no: index + 1,
+    //     company: item.name,
+    //     total_company_points: item.getDataValue('total_company_points'),
+    //     usernames: item.users.map(item => item.username).join('\n'),
+    //     created_at: dayjs(item.createdAt).format('DD MMM YYYY'),
+    //   });
+    // });
+
+    // // // Step 5: Set response headers for downloading the file
+    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    // res.setHeader('Content-Disposition', 'attachment; filename=users_with_html.xlsx');
+
+    // // Step 6: Write the Excel file to the response
+    // await workbook.xlsx.write(res);
+
+    // // // End the response
+    // res.end();
 
     res.status(200).json({ message: 'List of company', status: res.status, data: companies });
   } catch (error: any) {

@@ -6,10 +6,12 @@ import path from 'path';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import dayjs from 'dayjs';
+import ExcelJS from 'exceljs'
 
 import { User } from '../../models/User';
 import { Company } from '../../models/Company';
 import { sendEmail } from '../services/mail';
+import { getUserType } from '../utils';
 
 export const userLogin = async (req: Request, res: Response) => {
   const { email, password, level = 'CUSTOMER' } = req.body;
@@ -204,6 +206,14 @@ export const getUserProfile = async (req: any, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const total_company_points = await User.sum('accomplishment_total_points', {
+      where: {
+        company_id: user.company_id,
+        level: 'CUSTOMER',
+        is_active: true
+      }
+    });
+
     // Build the user profile response
     const userProfile = {
       id: user.user_id,
@@ -214,7 +224,7 @@ export const getUserProfile = async (req: any, res: Response) => {
       phone_number: user.phone_number ?? null,
       job_title: user.job_title ?? null,
       user_point: user.total_points,
-      company_point: user.company?.total_points,
+      company_point: total_company_points,
       accomplishment_total_points: user.accomplishment_total_points,
       fullname: user.fullname,
     };
@@ -260,7 +270,53 @@ export const getUserList = async (req: Request, res: Response) => {
       }
     )
 
-    res.status(200).json({ message: 'List of users', status: res.status, data: users });
+    const workbook = new ExcelJS.Workbook();
+        
+    const worksheet = workbook.addWorksheet('submissions');
+
+    worksheet.columns = [
+      { header: 'No', key: 'no', width: 10 },
+      { header: 'Username', key: 'username', width: 10 },
+      { header: 'Email', key: 'email', width: 10 },
+      { header: 'Fullname', key: 'fullname', width: 20 },
+      { header: 'User Type', key: 'user_type', width: 30 },
+      { header: 'Sales ID', key: 'program_saled_id', width: 15 },
+      { header: 'Phone Number', key: 'phone_number', width: 15 },
+      { header: 'Job', key: 'job_title', width: 50 },
+      { header: 'Accomplishments Total Points', key: 'accomplishment_total_points', width: 50 },
+      { header: 'Total Points', key: 'total_points', width: 50 },
+      { header: 'Created At', key: 'created_at', width: 50 }
+    ];
+
+    // Step 4: Add data to the worksheet, including HTML as text
+    users.forEach((item, index) => {
+      // Create the worksheet with the unique name
+      worksheet.addRow({
+        no: index + 1,
+        username: item.username,
+        email: item.email,
+        fullname: item.fullname,
+        user_type: getUserType(item.user_type),
+        program_saled_id: item.program_saled_id,
+        phone_number: item.phone_number,
+        created_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
+        job_title: item.job_title,
+        accomplishment_total_points: item.accomplishment_total_points,
+        total_points: item.total_points,
+      });
+    });
+
+    // // Step 5: Set response headers for downloading the file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=users_with_html.xlsx');
+
+    // Step 6: Write the Excel file to the response
+    await workbook.xlsx.write(res);
+
+    // End the response
+    res.end();
+
+    // res.status(200).json({ message: 'List of users', status: res.status, data: users });
   } catch (error: any) {
     console.error('Error fetching users:', error);
 

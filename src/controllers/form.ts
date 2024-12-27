@@ -555,3 +555,139 @@ export const downloadSubmission = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Something went wrong', error });
   } 
 }
+
+export const getReport = async (req: Request, res: Response) => {
+  const userId = 130;
+
+  const user = await User.findByPk(userId)
+  const forms = await Form.findAll({
+    where: { user_id: userId, status: {
+      [Op.or]: ['approved', 'rejected']
+    }},
+    include: [
+      {
+        model: User,
+        include: [Company]
+      },
+      {
+        model: FormType
+      },
+      {
+        model: Project
+      }
+    ],
+    order: [['status', 'asc']]
+  })
+
+  let bonusSignupPoint = 0;
+
+  const currentDate = dayjs(user?.createdAt);
+  const targetDate = dayjs('2024-11-23');
+
+  if (currentDate.isBefore(targetDate, 'day')) {
+    bonusSignupPoint = 400;
+  }
+
+  const newForm = forms.map((item) => {
+    let product_quantity = 0
+    let bonus_point = 0
+    if (item.form_data) {
+      if (Array.isArray(item.form_data[0].value)) {
+        product_quantity = item.form_data[0].value[0].numberOfQuantity
+      }
+    }
+
+    if (item.form_type.form_type_id === 1) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 10
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 20
+      } else if (product_quantity > 300) {
+        bonus_point = 40
+      }
+    } else if (item.form_type.form_type_id === 4) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 20
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 50
+      } else if (product_quantity > 300) {
+        bonus_point = 100
+      }
+    } else if (item.form_type.form_type_id === 5) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 50
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 100
+      } else if (product_quantity > 300) {
+        bonus_point = 200
+      }
+    } else if (item.form_type.form_type_id === 6) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 100
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 200
+      } else if (product_quantity > 300) {
+        bonus_point = 400
+      }
+    } else if (item.form_type.form_type_id === 7) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 5
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 10
+      } else if (product_quantity > 300) {
+        bonus_point = 20
+      }
+    } else if (item.form_type.form_type_id === 8) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 10
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 25
+      } else if (product_quantity > 300) {
+        bonus_point = 50
+      }
+    } else if (item.form_type.form_type_id === 9) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 25
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 50
+      } else if (product_quantity > 300) {
+        bonus_point = 100
+      }
+    } else if (item.form_type.form_type_id === 10) {
+      if (product_quantity >= 1 && product_quantity <= 50) {
+        bonus_point = 50
+      } else if (product_quantity > 50 && product_quantity <= 300) {
+        bonus_point = 100
+      } else if (product_quantity > 300) {
+        bonus_point = 200
+      }
+    }
+
+    return {
+      username: item.user.username,
+      company: item.user.company?.name,
+      milestone: item.form_type.form_name,
+      base_point: item.form_type.point_reward,
+      bonus_point: bonus_point,
+      project: item.project.name,
+      status: item.status,
+      total_point: item.form_type.point_reward + bonus_point,
+      submitted_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
+      updated_at: dayjs(item.updatedAt).format('DD MMM YYYY HH:mm'),
+    }
+  })
+
+  const total = newForm
+    .filter(item => item.status === 'approved')
+    .reduce((sum, item) => sum + item.total_point, 0);
+
+  // res.json(newForm);
+  res.json({
+    submission: newForm,
+    expected_total: total + bonusSignupPoint,
+    current_total: user?.total_points || 0,
+    current_acc_total: user?.accomplishment_total_points || 0,
+    bonus_registration: bonusSignupPoint,
+    diff_point: (total + bonusSignupPoint) - (user?.total_points || 0)
+  });
+}
