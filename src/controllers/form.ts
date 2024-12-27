@@ -591,9 +591,9 @@ export const getReport = async (req: Request, res: Response) => {
   const newForm = forms.map((item) => {
     let product_quantity = 0
     let bonus_point = 0
-    if (item.form_data) {
+    if (item.form_data && Array.isArray(item.form_data) && item.form_data[0]?.value) {
       if (Array.isArray(item.form_data[0].value)) {
-        product_quantity = item.form_data[0].value[0].numberOfQuantity
+        product_quantity = item.form_data[0].value[0]?.numberOfQuantity || 0
       }
     }
 
