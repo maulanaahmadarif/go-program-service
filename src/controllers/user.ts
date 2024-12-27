@@ -270,53 +270,53 @@ export const getUserList = async (req: Request, res: Response) => {
       }
     )
 
-    const workbook = new ExcelJS.Workbook();
+    // const workbook = new ExcelJS.Workbook();
         
-    const worksheet = workbook.addWorksheet('submissions');
+    // const worksheet = workbook.addWorksheet('submissions');
 
-    worksheet.columns = [
-      { header: 'No', key: 'no', width: 10 },
-      { header: 'Username', key: 'username', width: 10 },
-      { header: 'Email', key: 'email', width: 10 },
-      { header: 'Fullname', key: 'fullname', width: 20 },
-      { header: 'User Type', key: 'user_type', width: 30 },
-      { header: 'Sales ID', key: 'program_saled_id', width: 15 },
-      { header: 'Phone Number', key: 'phone_number', width: 15 },
-      { header: 'Job', key: 'job_title', width: 50 },
-      { header: 'Accomplishments Total Points', key: 'accomplishment_total_points', width: 50 },
-      { header: 'Total Points', key: 'total_points', width: 50 },
-      { header: 'Created At', key: 'created_at', width: 50 }
-    ];
+    // worksheet.columns = [
+    //   { header: 'No', key: 'no', width: 10 },
+    //   { header: 'Username', key: 'username', width: 10 },
+    //   { header: 'Email', key: 'email', width: 10 },
+    //   { header: 'Fullname', key: 'fullname', width: 20 },
+    //   { header: 'User Type', key: 'user_type', width: 30 },
+    //   { header: 'Sales ID', key: 'program_saled_id', width: 15 },
+    //   { header: 'Phone Number', key: 'phone_number', width: 15 },
+    //   { header: 'Job', key: 'job_title', width: 50 },
+    //   { header: 'Accomplishments Total Points', key: 'accomplishment_total_points', width: 50 },
+    //   { header: 'Total Points', key: 'total_points', width: 50 },
+    //   { header: 'Created At', key: 'created_at', width: 50 }
+    // ];
 
-    // Step 4: Add data to the worksheet, including HTML as text
-    users.forEach((item, index) => {
-      // Create the worksheet with the unique name
-      worksheet.addRow({
-        no: index + 1,
-        username: item.username,
-        email: item.email,
-        fullname: item.fullname,
-        user_type: getUserType(item.user_type),
-        program_saled_id: item.program_saled_id,
-        phone_number: item.phone_number,
-        created_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
-        job_title: item.job_title,
-        accomplishment_total_points: item.accomplishment_total_points,
-        total_points: item.total_points,
-      });
-    });
+    // // Step 4: Add data to the worksheet, including HTML as text
+    // users.forEach((item, index) => {
+    //   // Create the worksheet with the unique name
+    //   worksheet.addRow({
+    //     no: index + 1,
+    //     username: item.username,
+    //     email: item.email,
+    //     fullname: item.fullname,
+    //     user_type: getUserType(item.user_type),
+    //     program_saled_id: item.program_saled_id,
+    //     phone_number: item.phone_number,
+    //     created_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
+    //     job_title: item.job_title,
+    //     accomplishment_total_points: item.accomplishment_total_points,
+    //     total_points: item.total_points,
+    //   });
+    // });
 
-    // // Step 5: Set response headers for downloading the file
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=users_with_html.xlsx');
+    // // // Step 5: Set response headers for downloading the file
+    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    // res.setHeader('Content-Disposition', 'attachment; filename=users_with_html.xlsx');
 
-    // Step 6: Write the Excel file to the response
-    await workbook.xlsx.write(res);
+    // // Step 6: Write the Excel file to the response
+    // await workbook.xlsx.write(res);
 
-    // End the response
-    res.end();
+    // // End the response
+    // res.end();
 
-    // res.status(200).json({ message: 'List of users', status: res.status, data: users });
+    res.status(200).json({ message: 'List of users', status: res.status, data: users });
   } catch (error: any) {
     console.error('Error fetching users:', error);
 
