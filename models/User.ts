@@ -42,6 +42,8 @@ export interface UserAttributes {
   token?: string | null;
   token_purpose?: 'EMAIL_CONFIRMATION' | 'PASSWORD_RESET' | null;
   token_expiration?: Date | null;
+  referral_code?: string;
+  referred_by?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -84,9 +86,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Column(DataType.STRING(255)) // Specify data type
   public password_hash!: string;
 
-  @AllowNull(false)
+  @AllowNull(true)
   @Column(DataType.STRING(255)) // Specify data type
-  public program_saled_id!: string;
+  public program_saled_id?: string;
 
   @AllowNull(true)
   @Column(DataType.STRING(255)) // Specify data type
@@ -124,6 +126,16 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Column(DataType.DATE) // Specify data type
   public token_expiration!: Date;
 
+  @AllowNull(true)
+  @Unique
+  @Column(DataType.STRING(10))
+  public referral_code?: string;
+
+  @ForeignKey(() => User)
+  @AllowNull(true)
+  @Column(DataType.INTEGER)
+  public referred_by?: number;
+
   // Timestamps
   @CreatedAt
   @Column // Add this line to specify the column for createdAt
@@ -148,6 +160,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
 
   @BelongsTo(() => Company)
   company?: Company;
+
+  @BelongsTo(() => User, 'referred_by')
+  referrer?: User;
 
   // static associate(models: any) {
   //   User.hasMany(models.Form, { foreignKey: 'user_id' });

@@ -114,8 +114,29 @@ export const userSignup = async (req: Request, res: Response) => {
       company_id,
       user_type,
       fullname,
-      custom_company
+      custom_company,
+      referral_code
     } = req.body
+
+    // Check if email already exists
+    const existingEmail = await User.findOne({ where: { email } });
+    if (existingEmail) {
+      return res.status(400).json({ message: 'Email is already registered' });
+    }
+
+    // Check if username already exists
+    const existingUsername = await User.findOne({ where: { username } });
+    if (existingUsername) {
+      return res.status(400).json({ message: 'Username is already taken' });
+    }
+
+    // Check if referral code exists if provided
+    if (referral_code) {
+      const referrer = await User.findOne({ where: { referral_code } });
+      if (!referrer) {
+        return res.status(400).json({ message: 'Invalid referral code' });
+      }
+    }
 
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -130,6 +151,18 @@ export const userSignup = async (req: Request, res: Response) => {
       normalize_company_id = customCompany.company_id;
       normalize_program_saled_id = `${program_saled_id}-0${customCompany.company_id}`
     }
+
+    // Check if referral code exists
+    let referrerId: number | undefined = undefined;
+    if (referral_code) {
+      const referrer = await User.findOne({ where: { referral_code } });
+      if (referrer) {
+        referrerId = referrer.user_id;
+      }
+    }
+
+    // Generate unique referral code for new user
+    const newReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     // Create user in the database
     const user = await User.create({
@@ -147,7 +180,8 @@ export const userSignup = async (req: Request, res: Response) => {
       token,
       token_purpose: 'EMAIL_CONFIRMATION',
       token_expiration: new Date(Date.now() + 3600000),
-      // token_expiration: new Date(Date.now() + 24 * 60 * 60 * 1000), ONE DAY
+      referral_code: newReferralCode,
+      referred_by: referrerId
     });
 
     const userProfile = {
@@ -159,6 +193,7 @@ export const userSignup = async (req: Request, res: Response) => {
       job_title: user.job_title ?? null,
       user_point: user.total_points,
       company_point: user.company?.total_points,
+      referral_code: user.referral_code
     };
 
     const company = await Company.findByPk(company_id);
@@ -166,6 +201,12 @@ export const userSignup = async (req: Request, res: Response) => {
     if (company) {
       company.total_points = company.total_points as number + 0;
       await company.save();
+    }
+
+    // If user was referred, add points to both users after email confirmation
+    if (referrerId) {
+      // We'll add the points when the user confirms their email
+      // This is handled in the userSignupConfirmation endpoint
     }
 
     let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'emailConfirmation.html'), 'utf-8');
@@ -183,7 +224,13 @@ export const userSignup = async (req: Request, res: Response) => {
 
     // Handle validation errors
     if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({ message: 'Validation error', errors: error.errors });
+      return res.status(400).json({ 
+        message: 'Validation error', 
+        errors: error.errors.map((err: { path: string; message: string }) => ({ 
+          field: err.path, 
+          message: err.message 
+        }))
+      });
     }
 
     // Handle database connection or other errors
@@ -247,6 +294,9 @@ export const getUserProfile = async (req: any, res: Response) => {
 export const getUserList = async (req: Request, res: Response) => {
   try {
     const { company_id, user_type } = req.query;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
 
     const whereCondition: any = { level: 'CUSTOMER', is_active: true };
 
@@ -262,61 +312,54 @@ export const getUserList = async (req: Request, res: Response) => {
     const sortField: string = (req.query.sortBy as string) || 'total_points';
     const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
 
-    const users = await User.findAll(
+    // Get total count for pagination
+    const totalCount = await User.count({ where: whereCondition });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const users = await User.findAll({
+      where: whereCondition,
+      attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
+      include: [{
+        model: User,
+        as: 'referrer',
+        attributes: ['username'],
+      },
       {
-        where: whereCondition,
-        attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
-        order: [[sortField, orderDirection]]
+        model: Company,
+        attributes: ['name'],
+      }],
+      order: [[sortField, orderDirection]],
+      limit,
+      offset
+    });
+
+    // Transform the response to include referrer username and company name
+    const transformedUsers = users.map(user => {
+      const plainUser = user.toJSON();
+      return {
+        ...plainUser,
+        // @ts-ignore
+        referrer_username: plainUser.referrer?.username || null,
+        // @ts-ignore
+        company_name: plainUser.company?.name || null,
+        referrer: undefined,
+        company: undefined
+      };
+    });
+
+    res.status(200).json({ 
+      message: 'List of users', 
+      status: res.status, 
+      data: transformedUsers,
+      pagination: {
+        total_items: totalCount,
+        total_pages: totalPages,
+        current_page: page,
+        items_per_page: limit,
+        has_next: page < totalPages,
+        has_previous: page > 1
       }
-    )
-
-    // const workbook = new ExcelJS.Workbook();
-        
-    // const worksheet = workbook.addWorksheet('submissions');
-
-    // worksheet.columns = [
-    //   { header: 'No', key: 'no', width: 10 },
-    //   { header: 'Username', key: 'username', width: 10 },
-    //   { header: 'Email', key: 'email', width: 10 },
-    //   { header: 'Fullname', key: 'fullname', width: 20 },
-    //   { header: 'User Type', key: 'user_type', width: 30 },
-    //   { header: 'Sales ID', key: 'program_saled_id', width: 15 },
-    //   { header: 'Phone Number', key: 'phone_number', width: 15 },
-    //   { header: 'Job', key: 'job_title', width: 50 },
-    //   { header: 'Accomplishments Total Points', key: 'accomplishment_total_points', width: 50 },
-    //   { header: 'Total Points', key: 'total_points', width: 50 },
-    //   { header: 'Created At', key: 'created_at', width: 50 }
-    // ];
-
-    // // Step 4: Add data to the worksheet, including HTML as text
-    // users.forEach((item, index) => {
-    //   // Create the worksheet with the unique name
-    //   worksheet.addRow({
-    //     no: index + 1,
-    //     username: item.username,
-    //     email: item.email,
-    //     fullname: item.fullname,
-    //     user_type: getUserType(item.user_type),
-    //     program_saled_id: item.program_saled_id,
-    //     phone_number: item.phone_number,
-    //     created_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
-    //     job_title: item.job_title,
-    //     accomplishment_total_points: item.accomplishment_total_points,
-    //     total_points: item.total_points,
-    //   });
-    // });
-
-    // // // Step 5: Set response headers for downloading the file
-    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    // res.setHeader('Content-Disposition', 'attachment; filename=users_with_html.xlsx');
-
-    // // Step 6: Write the Excel file to the response
-    // await workbook.xlsx.write(res);
-
-    // // End the response
-    // res.end();
-
-    res.status(200).json({ message: 'List of users', status: res.status, data: users });
+    });
   } catch (error: any) {
     console.error('Error fetching users:', error);
 
@@ -359,46 +402,35 @@ export const forgotPassword = async (req: Request, res: Response) => {
 }
 
 export const userSignupConfirmation = async (req: Request, res: Response) => {
-  const { token } = req.params;
-
-  let bonusSignupPoint = 0;
-
-  const currentDate = dayjs();
-
-  // Define the target comparison date
-  const targetDate = dayjs('2024-11-23');
-
-  if (currentDate.isBefore(targetDate, 'day')) {
-    bonusSignupPoint = 400;
-  }
-
   try {
+    const { token } = req.params;
+
+    // Find user by token
     const user = await User.findOne({
       where: {
-        token: token,
-        // token_expiration: {
-        //   [Op.gt]: new Date(),
-        // },
-      },
+        token,
+        token_purpose: 'EMAIL_CONFIRMATION',
+        token_expiration: {
+          [Op.gt]: new Date()
+        }
+      }
     });
 
     if (!user) {
       return res.status(400).json({ message: 'Invalid or expired token' });
     }
 
-    // Update the password
+    // Update user status and points
     user.is_active = true;
-    user.token = null as any;
-    user.token_purpose = null as any;
-    user.token_expiration = null as any;
-    user.total_points = bonusSignupPoint;
-    user.accomplishment_total_points = bonusSignupPoint;
+    user.token = '';
+    user.token_purpose = 'EMAIL_CONFIRMATION';
+    user.token_expiration = new Date();
     await user.save();
 
+    // Update company points
     const company = await Company.findByPk(user.company_id);
-
     if (company) {
-      company.total_points = company.total_points as number + bonusSignupPoint;
+      company.total_points = (company.total_points || 0);
       await company.save();
     }
 
@@ -412,10 +444,10 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'Email confirmed successfully' });
   } catch (error) {
-    console.error(error);
+    console.error('Error confirming email:', error);
     res.status(500).json({ message: 'Something went wrong' });
   }
-}
+};
 
 export const resetPassword = async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;

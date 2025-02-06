@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
+import { Op } from 'sequelize';
 
 import { Redemption } from '../../models/Redemption';
 import { User } from '../../models/User';
@@ -218,3 +219,35 @@ export const approveRedeem = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Something went wrong', error });
   }
 }
+
+export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) => {
+  const user_id = req.user?.userId as number;
+  
+  try {
+    const redemption = await Redemption.findOne({
+      where: {
+        user_id,
+        product_id: 7,
+        status: {
+          [Op.in]: ['active', 'approved'] // Only check active or approved redemptions
+        }
+      }
+    });
+
+    res.status(200).json({
+      message: 'Redemption check successful',
+      has_redeemed: !!redemption,
+    });
+  } catch (error: any) {
+    console.error('Error checking redemption status:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+};
