@@ -240,12 +240,22 @@ export const userSignup = async (req: Request, res: Response) => {
 
 export const getUserProfile = async (req: any, res: Response) => {
   try {
-    const userId = req.user?.userId; // Assuming user ID is passed as a URL parameter
+    const userId = req.user?.userId;
 
     // Fetch user and related company information
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password_hash'] },
-      include: [{ association: 'company', attributes: ['name', 'total_points'] }],
+      include: [
+        { 
+          model: Company, 
+          attributes: ['name', 'total_points'] 
+        },
+        {
+          model: User,
+          as: 'referrer',
+          attributes: ['username'],
+        }
+      ],
     });
 
     // Check if user exists
@@ -274,8 +284,12 @@ export const getUserProfile = async (req: any, res: Response) => {
       company_point: total_company_points,
       accomplishment_total_points: user.accomplishment_total_points,
       fullname: user.fullname,
+      user_type: user.user_type,
+      ...(user.user_type === 'T1' && {
+        referral_code: user.referral_code,
+      }),
+      referred_by: user.referrer?.username || null
     };
-    
 
     // Basic response validation: Check required fields
     if (!userProfile.id || !userProfile.email) {
@@ -293,7 +307,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 
 export const getUserList = async (req: Request, res: Response) => {
   try {
-    const { company_id, user_type } = req.query;
+    const { company_id, user_type, start_date, end_date } = req.query;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
@@ -302,11 +316,26 @@ export const getUserList = async (req: Request, res: Response) => {
 
     if (company_id) {
       whereCondition.company_id = company_id;
-      delete whereCondition.is_active
+      delete whereCondition.is_active;
     }
 
     if (user_type) {
-      whereCondition.user_type = user_type
+      whereCondition.user_type = user_type;
+    }
+
+    // Add date range filters if provided
+    if (start_date) {
+      whereCondition.createdAt = {
+        ...(whereCondition.createdAt || {}),
+        [Op.gte]: new Date(start_date as string),
+      };
+    }
+
+    if (end_date) {
+      whereCondition.createdAt = {
+        ...(whereCondition.createdAt || {}),
+        [Op.lte]: new Date(end_date as string),
+      };
     }
 
     const sortField: string = (req.query.sortBy as string) || 'total_points';
@@ -343,7 +372,8 @@ export const getUserList = async (req: Request, res: Response) => {
         // @ts-ignore
         company_name: plainUser.company?.name || null,
         referrer: undefined,
-        company: undefined
+        company: undefined,
+        created_at: dayjs(plainUser.createdAt).format('DD MMM YYYY HH:mm')
       };
     });
 
@@ -579,3 +609,61 @@ export const activateUser = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Something went wrong' });
   }
 }
+
+export const bulkGenerateReferralCodes = async (req: Request, res: Response) => {
+  try {
+    // Find all users without referral codes or with empty referral codes
+    const usersWithoutCodes = await User.findAll({
+      where: {
+        referral_code: null,
+        level: 'CUSTOMER',
+        is_active: true
+      } as any
+    });
+
+    if (usersWithoutCodes.length === 0) {
+      return res.status(200).json({ 
+        message: 'No users found without referral codes',
+        updated_count: 0
+      });
+    }
+
+    const updatedUsers = [];
+    
+    for (const user of usersWithoutCodes) {
+      let isUnique = false;
+      let newReferralCode = '';
+
+      while (!isUnique) {
+        // Generate a new 8-character referral code
+        newReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+        
+        // Check if this code already exists
+        const existingCode = await User.findOne({ where: { referral_code: newReferralCode } });
+        if (!existingCode) {
+          isUnique = true;
+        }
+      }
+
+      // Update user with new referral code
+      user.referral_code = newReferralCode;
+      await user.save();
+
+      updatedUsers.push({
+        user_id: user.user_id,
+        username: user.username,
+        referral_code: newReferralCode
+      });
+    }
+
+    res.status(200).json({ 
+      message: 'Referral codes generated successfully',
+      updated_count: updatedUsers.length,
+      updated_users: updatedUsers
+    });
+
+  } catch (error) {
+    console.error('Error generating referral codes:', error);
+    res.status(500).json({ message: 'An error occurred while generating referral codes' });
+  }
+};

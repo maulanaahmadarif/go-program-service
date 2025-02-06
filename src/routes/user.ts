@@ -12,7 +12,8 @@ import {
   userSignupConfirmation,
   addInternalUser,
   deleteUser,
-  activateUser
+  activateUser,
+  bulkGenerateReferralCodes
 } from '../controllers/user';
 import authenticate from '../middleware/auth';
 
@@ -29,5 +30,6 @@ router.post('/update', authenticate, updateUser);
 router.get('/confirmation/:token', userSignupConfirmation)
 router.delete('/delete/:user_id', authenticate, deleteUser)
 router.post('/activate', authenticate, activateUser)
+// router.post('/bulk-generate-referral-codes', bulkGenerateReferralCodes)
 
 export default router;
