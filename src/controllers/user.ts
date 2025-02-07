@@ -285,9 +285,7 @@ export const getUserProfile = async (req: any, res: Response) => {
       accomplishment_total_points: user.accomplishment_total_points,
       fullname: user.fullname,
       user_type: user.user_type,
-      ...(user.user_type === 'T1' && {
-        referral_code: user.referral_code,
-      }),
+      referral_code: user.referral_code,
       referred_by: user.referrer?.username || null
     };
 

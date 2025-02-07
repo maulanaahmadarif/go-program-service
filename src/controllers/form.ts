@@ -186,9 +186,6 @@ export const formSubmission = async (req: any, res: Response) => {
     const previousSubmissions = await Form.count({
       where: {
         user_id: userId,
-        status: {
-          [Op.or]: ['submitted', 'approved']
-        }
       },
       transaction
     });
