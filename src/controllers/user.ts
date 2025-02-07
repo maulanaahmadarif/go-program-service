@@ -253,7 +253,7 @@ export const getUserProfile = async (req: any, res: Response) => {
         {
           model: User,
           as: 'referrer',
-          attributes: ['username'],
+          attributes: ['username', 'referral_code'],
         }
       ],
     });
@@ -271,6 +271,8 @@ export const getUserProfile = async (req: any, res: Response) => {
       }
     });
 
+    const plainUser = user.get({ plain: true }) as any;
+
     // Build the user profile response
     const userProfile = {
       id: user.user_id,
@@ -285,8 +287,9 @@ export const getUserProfile = async (req: any, res: Response) => {
       accomplishment_total_points: user.accomplishment_total_points,
       fullname: user.fullname,
       user_type: user.user_type,
-      referral_code: user.referral_code,
-      referred_by: user.referrer?.username || null
+      // For T2 users, show the referral code they used during signup
+      referral_code: plainUser.user_type === 'T2' ? plainUser.referrer?.referral_code || null : plainUser.referral_code,
+      referred_by: plainUser.referrer?.username || null
     };
 
     // Basic response validation: Check required fields
@@ -346,15 +349,17 @@ export const getUserList = async (req: Request, res: Response) => {
     const users = await User.findAll({
       where: whereCondition,
       attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
-      include: [{
-        model: User,
-        as: 'referrer',
-        attributes: ['username'],
-      },
-      {
-        model: Company,
-        attributes: ['name'],
-      }],
+      include: [
+        {
+          model: User,
+          as: 'referrer',
+          attributes: ['username', 'referral_code'],
+        },
+        {
+          model: Company,
+          attributes: ['name'],
+        }
+      ],
       order: [[sortField, orderDirection]],
       limit,
       offset
@@ -362,13 +367,13 @@ export const getUserList = async (req: Request, res: Response) => {
 
     // Transform the response to include referrer username and company name
     const transformedUsers = users.map(user => {
-      const plainUser = user.toJSON();
+      const plainUser = user.get({ plain: true }) as any;
       return {
         ...plainUser,
-        // @ts-ignore
         referrer_username: plainUser.referrer?.username || null,
-        // @ts-ignore
         company_name: plainUser.company?.name || null,
+        // For T2 users, show the referral code they used during signup
+        referral_code: plainUser.user_type === 'T2' ? plainUser.referrer?.referral_code || null : plainUser.referral_code,
         referrer: undefined,
         company: undefined,
         created_at: dayjs(plainUser.createdAt).format('DD MMM YYYY HH:mm')
