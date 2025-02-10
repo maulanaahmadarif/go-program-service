@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
+import { Op } from 'sequelize';
 
 import { Redemption } from '../../models/Redemption';
 import { User } from '../../models/User';
@@ -186,20 +187,31 @@ export const approveRedeem = async (req: Request, res: Response) => {
 
     await redeemDetail.save({ transaction });
 
-    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
+    let htmlTemplate;
+    let emailSubject;
 
-    htmlTemplate = htmlTemplate
-      .replace('{{redemptionDate}}', dayjs(redeemDetail.createdAt).format('DD MMM YYYY HH:mm'))
-      .replace('{{redemptionItem}}', productDetail!.name)
-      .replace('{{partnerName}}', redeemDetail.fullname)
-      .replace('{{email}}', redeemDetail.email)
-      .replace('{{phoneNumber}}', redeemDetail.phone_number)
-      .replace('{{address}}', redeemDetail.shipping_address)
-      .replace('{{postalCode}}', redeemDetail.postal_code)
-      .replace('{{accomplishmentScore}}', String(user?.accomplishment_total_points ?? 'N/A'))
-      .replace('{{currentScore}}', String(user?.total_points ?? 'N/A'));
+    if (redeemDetail.product_id === 7) {
+      // Use redeemConfirmation.html for Starbucks E-Voucher
+      htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemConfirmation.html'), 'utf-8');
+      htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
+      emailSubject = 'Welcome to Lenovo Go Pro Phase 2 - Starbucks E-Voucher Processing';
+    } else {
+      // Use regular redeemEmail.html for other products
+      htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
+      htmlTemplate = htmlTemplate
+        .replace('{{redemptionDate}}', dayjs(redeemDetail.createdAt).format('DD MMM YYYY HH:mm'))
+        .replace('{{redemptionItem}}', productDetail!.name)
+        .replace('{{partnerName}}', redeemDetail.fullname)
+        .replace('{{email}}', redeemDetail.email)
+        .replace('{{phoneNumber}}', redeemDetail.phone_number)
+        .replace('{{address}}', redeemDetail.shipping_address)
+        .replace('{{postalCode}}', redeemDetail.postal_code)
+        .replace('{{accomplishmentScore}}', String(user?.accomplishment_total_points ?? 'N/A'))
+        .replace('{{currentScore}}', String(user?.total_points ?? 'N/A'));
+      emailSubject = 'Lenovo Go Pro Redemption Notification';
+    }
 
-    await sendEmail({ to: redeemDetail.email, subject: 'Lenovo Go Pro Redemption Notification', html: htmlTemplate });
+    await sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate });
 
     await transaction.commit();
 
@@ -218,3 +230,35 @@ export const approveRedeem = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Something went wrong', error });
   }
 }
+
+export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) => {
+  const user_id = req.user?.userId as number;
+  
+  try {
+    const redemption = await Redemption.findOne({
+      where: {
+        user_id,
+        product_id: 7,
+        status: {
+          [Op.in]: ['active', 'approved'] // Only check active or approved redemptions
+        }
+      }
+    });
+
+    res.status(200).json({
+      message: 'Redemption check successful',
+      has_redeemed: !!redemption,
+    });
+  } catch (error: any) {
+    console.error('Error checking redemption status:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+};

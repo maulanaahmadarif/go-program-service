@@ -7,22 +7,43 @@ interface JsonItem {
 export function formatJsonToLabelValueString(json: JsonItem[]): string {
   let result = "";
 
-  json.forEach((item) => {
-    if (typeof item.value === "string") {
-      // If value is a string, format directly
-      result += `${item.label}: ${item.value}\n`;
-    } else if (Array.isArray(item.value)) {
-      // If value is an array, process each object in the array
-      result += `${item.label}:\n`;
-      item.value.forEach((subItem) => {
-        Object.entries(subItem).forEach(([key, value]) => {
-          result += `${mapLabelToDifferentLabel(key)}: ${value}\n`; // Indent for array objects
-        });
-      });
-    }
-  });
+  // Find company and job entries
+  const companyEntry = json.find(item => item.label.toLowerCase() === 'company');
+  const jobEntry = json.find(item => item.label.toLowerCase() === 'job');
+  const productsEntry = json.find(item => item.label.toLowerCase() === 'products');
 
-  return result.trim(); // Remove trailing newline
+  // Add company and job
+  if (companyEntry && typeof companyEntry.value === 'string') {
+    result += `Company: ${companyEntry.value}\n`;
+  }
+  if (jobEntry && typeof jobEntry.value === 'string') {
+    result += `Job: ${jobEntry.value}\n`;
+  }
+
+  // Add a blank line before product section
+  result += '\n';
+
+  // Add Product section if products exist
+  if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
+    result += 'Product:\n';
+    const productData = productsEntry.value[0]; // Get the first product
+
+    // Add product details in specific order
+    if (productData.productCategory) {
+      result += `Product Category: ${productData.productCategory}\n`;
+    }
+    if (productData.productType) {
+      result += `Product Type: ${productData.productType}\n`;
+    }
+    if (productData.numberOfQuantity) {
+      result += `Quantity: ${productData.numberOfQuantity}\n`;
+    }
+    if (productData.document) {
+      result += `Document: ${productData.document}\n`;
+    }
+  }
+
+  return result.trim();
 }
 
 export function getUserType(type: string): string {
