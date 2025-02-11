@@ -36,14 +36,34 @@ export const approveSubmission = async (req: any, res: Response) => {
         const company = await Company.findByPk(user?.company_id);
         const formType = await FormType.findByPk(updatedForm.form_type_id);
 
+        // Check for completion bonus based on user type
+        const currentDate = dayjs();
+        const targetDate = dayjs('2025-03-14');
+        
+        if (currentDate.isBefore(targetDate)) {
+          const approvedSubmissionsCount = await Form.count({
+            where: {
+              user_id: updatedForm.user_id,
+              project_id: updatedForm.project_id,
+              status: 'approved'
+            }
+          });
+
+          if (user?.user_type === 'T2' && approvedSubmissionsCount === 6) {
+            additionalPoint += 200; // Add bonus points for T2 user completing 6 submissions
+          } else if (user?.user_type === 'T1' && approvedSubmissionsCount === 4) {
+            additionalPoint += 200; // Add bonus points for T1 user completing 4 submissions
+          }
+        }
+
         if (user && formType) {
-          user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
+          user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint;
           user.accomplishment_total_points = (user.accomplishment_total_points || 0) + formType.point_reward + additionalPoint;
           await user.save();
         }
     
         if (company && formType) {
-          company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint; // Assuming `points` field exists on User
+          company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint;
           await company.save();
         }
     
@@ -245,16 +265,16 @@ export const formSubmission = async (req: any, res: Response) => {
         where: {
           user_id: userId,
           project_id: project_id,
-          status: 'submitted'
+          status: {
+            [Op.or]: ['submitted', 'approved']
+          }
         },
         transaction
       }
     )
 
     const currentDate = dayjs();
-
-    // Define the target comparison date
-    const targetDate = dayjs('2024-12-14');
+    const targetDate = dayjs('2025-03-14');
   
     if (currentDate.isBefore(targetDate, 'day')) {
       if (user?.user_type === 'T2') {
