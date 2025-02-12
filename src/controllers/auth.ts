@@ -19,14 +19,6 @@ const generateTokens = (payload: any) => {
   return { accessToken, refreshToken };
 };
 
-// Helper function to get cookie domain from APP_URL
-const getCookieDomain = () => {
-  if (process.env.NODE_ENV !== 'production') {
-    return 'localhost';
-  }
-  return undefined; // Let the browser handle the domain for cross-site cookies
-};
-
 export const generateNewToken = async (req: Request, res: Response) => {
   const refreshToken = req.cookies.refreshToken;
   if (!refreshToken) return res.status(403).json({ message: 'Refresh token missing' });
@@ -78,17 +70,15 @@ export const generateNewToken = async (req: Request, res: Response) => {
       // Set new cookies with cross-site settings
       res.cookie('accessToken', newAccessToken, {
         httpOnly: true,
-        secure: true, // Always use secure in production
-        sameSite: 'none', // Required for cross-site cookies
-        // domain: getCookieDomain(),
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
 
       res.cookie('refreshToken', newRefreshToken, {
         httpOnly: true,
-        secure: true, // Always use secure in production
-        sameSite: 'none', // Required for cross-site cookies
-        // domain: getCookieDomain(),
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
@@ -134,17 +124,15 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
     // Clear cookies with cross-domain support
     res.cookie('accessToken', '', {
       httpOnly: true,
-      secure: true, // Always use secure in production
-      sameSite: 'none', // Required for cross-site cookies
-      // domain: getCookieDomain(),
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 0
     });
 
     res.cookie('refreshToken', '', {
       httpOnly: true,
-      secure: true, // Always use secure in production
-      sameSite: 'none', // Required for cross-site cookies
-      // domain: getCookieDomain(),
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 0
     });
 

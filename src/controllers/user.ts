@@ -18,19 +18,6 @@ import { VerificationToken } from '../../models/VerificationToken';
 import { PointTransaction } from '../../models/PointTransaction';
 import { sequelize } from '../db';
 
-// Helper function to get cookie domain from APP_URL
-const getCookieDomain = () => {
-  if (process.env.NODE_ENV !== 'production') {
-    return 'localhost';
-  }
-  try {
-    const url = new URL(process.env.APP_URL as string);
-    return '.' + url.hostname; // Add dot prefix for subdomain support
-  } catch (error) {
-    console.warn('Invalid APP_URL, falling back to default domain');
-    return '.gopro-lenovoid.com';
-  }
-};
 
 export const userLogin = async (req: Request, res: Response) => {
   const { email, password, level = 'CUSTOMER' } = req.body;
@@ -82,17 +69,15 @@ export const userLogin = async (req: Request, res: Response) => {
     // Set cookies with cross-site settings
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: true, // Always use secure in production
-      sameSite: 'none', // Required for cross-site cookies
-      // domain: getCookieDomain(),
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true, // Always use secure in production
-      sameSite: 'none', // Required for cross-site cookies
-      // domain: getCookieDomain(),
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
