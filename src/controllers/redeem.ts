@@ -10,20 +10,62 @@ import { UserAction } from '../../models/UserAction';
 import { sequelize } from '../db';
 import { sendEmail } from '../services/mail';
 import { Product } from '../../models/Product';
-
-interface CustomRequest extends Request {
-  user?: {
-    userId: number;
-  };
-}
+import { PointTransaction } from '../../models/PointTransaction';
+import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
 
 export const redeemPoint = async (req: CustomRequest, res: Response) => {
-  const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes } = req.body;
-  const user_id = req.user?.userId as number
+  const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
+  const user_id = req.user?.userId as number;
 
   const transaction = await sequelize.transaction();
 
   try {
+    // Input validation
+    if (!product_id || !shipping_address || !fullname || !email || !phone_number || !postal_code) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        message: 'Missing required fields',
+        errors: {
+          product_id: !product_id ? 'Product ID is required' : null,
+          points_spent: !points_spent ? 'Points spent is required' : null,
+          shipping_address: !shipping_address ? 'Shipping address is required' : null,
+          fullname: !fullname ? 'Full name is required' : null,
+          email: !email ? 'Email is required' : null,
+          phone_number: !phone_number ? 'Phone number is required' : null,
+          postal_code: !postal_code ? 'Postal code is required' : null
+        }
+      });
+    }
+
+    // Check if user has enough points
+    const user = await User.findByPk(user_id, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if ((user.total_points || 0) < points_spent) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        message: 'Insufficient points',
+        current_points: user.total_points,
+        required_points: points_spent
+      });
+    }
+
+    // Check if product exists and has stock
+    const product = await Product.findByPk(product_id, { transaction });
+    if (!product) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    if ((product.stock_quantity || 0) <= 0) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Product is out of stock' });
+    }
+
+    // Create redemption record
     const redemption = await Redemption.create({
       user_id,
       product_id,
@@ -35,45 +77,66 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       postal_code,
       notes,
       status: 'active'
-    }, { transaction })
+    }, { transaction });
 
-    const user = await User.findByPk(user_id, { transaction });
-    const product = await Product.findByPk(product_id, { transaction });
+    // Create point transaction record
+    await PointTransaction.create({
+      user_id: user.user_id,
+      points: -points_spent,
+      transaction_type: 'spend',
+      redemption_id: redemption.redemption_id,
+      description: `Spent ${points_spent} points to redeem ${product.name}`
+    }, { transaction });
 
-    if (user && product) {
-      user.total_points = (user.total_points || 0) - points_spent;
-      await user.save({ transaction });
-    }
+    // Update user points
+    user.total_points = (user.total_points || 0) - points_spent;
+    await user.save({ transaction });
 
-    if (product) {
-      product.stock_quantity = (product.stock_quantity || 0) - 1;
-      await product.save({ transaction });
-    }
+    // Update product stock
+    product.stock_quantity = (product.stock_quantity || 0) - 1;
+    await product.save({ transaction });
 
+    // Create user action record
     await UserAction.create({
       user_id: user_id,
       entity_type: 'REDEEM',
       action_type: req.method,
       redemption_id: redemption.redemption_id,
-      // ip_address: req.ip,
-      // user_agent: req.get('User-Agent'),
     }, { transaction });
 
     await transaction.commit();
 
-    res.status(200).json({ message: 'Success redeem', status: res.status });
+    const response: RedeemPointResponse = {
+      message: 'Redemption successful',
+      redemption_id: redemption.redemption_id,
+      remaining_points: user.total_points,
+      status: res.statusCode
+    };
+
+    res.status(200).json(response);
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error redeem points', error);
+    console.error('Error in redemption process:', error);
 
-    // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
-      return res.status(400).json({ message: 'Validation error', errors: messages });
+      return res.status(400).json({ 
+        message: 'Validation error', 
+        errors: messages 
+      });
     }
 
-    // Handle other types of errors
-    res.status(500).json({ message: 'Something went wrong', error });
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ 
+        message: 'Duplicate entry error',
+        errors: error.errors.map((err: any) => err.message)
+      });
+    }
+
+    res.status(500).json({ 
+      message: 'An error occurred during redemption',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -127,6 +190,15 @@ export const rejectRedeem = async (req: Request, res: Response) => {
     if (!productDetail) {
       return res.status(404).json({ message: 'Product data not found' });
     }
+
+    // Create point transaction record for returned points
+    await PointTransaction.create({
+      user_id: user.user_id,
+      points: redeemDetail.points_spent,
+      transaction_type: 'adjust',
+      redemption_id: redemption_id,
+      description: `Returned ${redeemDetail.points_spent} points from rejected redemption of ${productDetail.name}`
+    }, { transaction });
 
     user.total_points = (user.total_points || 0) + redeemDetail.points_spent;
     redeemDetail.status = 'rejected'
