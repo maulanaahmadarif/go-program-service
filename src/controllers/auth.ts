@@ -20,7 +20,7 @@ const generateTokens = (payload: any) => {
 };
 
 export const generateNewToken = async (req: Request, res: Response) => {
-  const refreshToken = req.cookies.refreshToken;
+  const { refreshToken } = req.body;
   if (!refreshToken) return res.status(403).json({ message: 'Refresh token missing' });
 
   try {
@@ -67,37 +67,20 @@ export const generateNewToken = async (req: Request, res: Response) => {
 
       await transaction.commit();
 
-      // Set new cookies with cross-site settings
-      res.cookie('accessToken', newAccessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        domain: '.gopro-lenovoid.com',
-        maxAge: 24 * 60 * 60 * 1000 // 1 day
+      return res.json({ 
+        message: 'Tokens refreshed successfully',
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
       });
-
-      res.cookie('refreshToken', newRefreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        domain: '.gopro-lenovoid.com',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-
-      return res.json({ message: 'Tokens refreshed successfully' });
     } catch (error) {
       await transaction.rollback();
       throw error;
     }
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
       return res.status(401).json({ message: 'Refresh token expired, please log in again' });
     }
     if (error.name === 'JsonWebTokenError') {
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
       return res.status(403).json({ message: 'Invalid refresh token' });
     }
     console.error('Error refreshing tokens:', error);
@@ -106,7 +89,7 @@ export const generateNewToken = async (req: Request, res: Response) => {
 };
 
 export const revokeRefreshToken = async (req: Request, res: Response) => {
-  const refreshToken = req.cookies.refreshToken;
+  const { refreshToken } = req.body;
   if (!refreshToken) {
     return res.status(404).json({ message: 'No refresh token found' });
   }
@@ -122,23 +105,6 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
 
     token.is_revoked = true;
     await token.save();
-
-    // Clear cookies with cross-domain support
-    res.cookie('accessToken', '', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: '.gopro-lenovoid.com',
-      maxAge: 0
-    });
-
-    res.cookie('refreshToken', '', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: '.gopro-lenovoid.com',
-      maxAge: 0
-    });
 
     return res.json({ message: 'Logged out successfully' });
   } catch (error) {

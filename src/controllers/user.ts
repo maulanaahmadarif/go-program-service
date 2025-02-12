@@ -66,23 +66,6 @@ export const userLogin = async (req: Request, res: Response) => {
       });
     }
 
-    // Set cookies with cross-site settings
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: '.gopro-lenovoid.com',
-      maxAge: 24 * 60 * 60 * 1000 // 1 day
-    });
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: '.gopro-lenovoid.com',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
-
     const userDetail = {
       user_id: user.user_id,
       email: user.email,
@@ -98,7 +81,9 @@ export const userLogin = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'Login successful',
-      user: userDetail
+      user: userDetail,
+      accessToken,
+      refreshToken
     });
   } catch (error) {
     console.error('Error during login:', error);
