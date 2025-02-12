@@ -22,10 +22,10 @@ import { Redemption } from './Redemption';
 export interface PointTransactionAttributes {
   transaction_id?: number;
   user_id: number;
-  redemption_id: number;
+  redemption_id?: number | null;
   points: number;
   transaction_type: string;
-  form_id: number;
+  form_id?: number | null;
   description: string;
   createdAt?: Date;
   updatedAt?: Date;  

@@ -9,9 +9,28 @@ import dayjs from 'dayjs';
 import ExcelJS from 'exceljs'
 
 import { User } from '../../models/User';
+import { RefreshToken } from '../../models/RefreshToken';
 import { Company } from '../../models/Company';
 import { sendEmail } from '../services/mail';
 import { getUserType } from '../utils';
+import { generateTokens } from './auth'; 
+import { VerificationToken } from '../../models/VerificationToken';
+import { PointTransaction } from '../../models/PointTransaction';
+import { sequelize } from '../db';
+
+// Helper function to get cookie domain from APP_URL
+const getCookieDomain = () => {
+  if (process.env.NODE_ENV !== 'production') {
+    return 'localhost';
+  }
+  try {
+    const url = new URL(process.env.APP_URL as string);
+    return '.' + url.hostname; // Add dot prefix for subdomain support
+  } catch (error) {
+    console.warn('Invalid APP_URL, falling back to default domain');
+    return '.gopro-lenovoid.com';
+  }
+};
 
 export const userLogin = async (req: Request, res: Response) => {
   const { email, password, level = 'CUSTOMER' } = req.body;
@@ -31,13 +50,52 @@ export const userLogin = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Email has not been confirmed' });
     }
 
-    // Generate JWT token
-    const token = jwt.sign({ userId: user.user_id, email: user.email, companyId: user.company_id }, process.env.JWT_SECRET as string, {
-      expiresIn: '1d',  // Adjust expiration as needed
+    // Generate tokens
+    const { accessToken, refreshToken } = generateTokens({
+      userId: user.user_id,
+      email: user.email,
+      companyId: user.company_id
     });
 
-    const refreshToken = jwt.sign({ userId: user.user_id, email: user.email, companyId: user.company_id }, process.env.REFRESH_JWT_SECRET as string, {
-      expiresIn: '7d',  // Adjust expiration as needed
+    // Find existing refresh token or create new one
+    const [existingToken] = await RefreshToken.findOrCreate({
+      where: {
+        user_id: user.user_id,
+        is_revoked: false
+      },
+      defaults: {
+        token: refreshToken,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        is_revoked: false
+      }
+    });
+
+    // If token exists, update it
+    if (existingToken) {
+      await existingToken.update({
+        token: refreshToken,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        is_revoked: false
+      });
+    }
+
+    const cookieDomain = getCookieDomain();
+
+    // Set cookies with cross-domain support
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      domain: cookieDomain,
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      domain: cookieDomain,
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
     const userDetail = {
@@ -49,11 +107,16 @@ export const userLogin = async (req: Request, res: Response) => {
       username: user.username,
       user_point: user.total_points,
       phone_number: user.phone_number,
-      user_type: user.user_type
+      user_type: user.user_type,
+      level: user.level
     }
 
-    res.status(200).json({ message: 'Login successful', token, refreshToken, user: userDetail });
+    res.status(200).json({
+      message: 'Login successful',
+      user: userDetail
+    });
   } catch (error) {
+    console.error('Error during login:', error);
     res.status(500).json({ message: 'Something went wrong', error });
   }
 };
@@ -147,7 +210,7 @@ export const userSignup = async (req: Request, res: Response) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const token = crypto.randomBytes(32).toString('hex');
+    const verificationToken = crypto.randomBytes(32).toString('hex');
 
     let normalize_company_id = company_id
     let normalize_program_saled_id = program_saled_id;
@@ -183,11 +246,16 @@ export const userSignup = async (req: Request, res: Response) => {
       total_points: 0,
       accomplishment_total_points: 0,
       fullname,
-      token,
-      token_purpose: 'EMAIL_CONFIRMATION',
-      token_expiration: new Date(Date.now() + 3600000),
       referral_code: newReferralCode,
       referred_by: referrerId
+    });
+
+    // Create verification token
+    await VerificationToken.create({
+      user_id: user.user_id,
+      token: verificationToken,
+      purpose: 'EMAIL_CONFIRMATION',
+      expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
     });
 
     const userProfile = {
@@ -219,7 +287,7 @@ export const userSignup = async (req: Request, res: Response) => {
 
     htmlTemplate = htmlTemplate
       .replace('{{userName}}', user.username)
-      .replace('{{confirmationLink}}', `${process.env.APP_URL}/email-confirmation?token=${token}`)
+      .replace('{{confirmationLink}}', `${process.env.APP_URL}/email-confirmation?token=${verificationToken}`)
 
     await sendEmail({ to: user.email, bcc: process.env.EMAIL_BCC, subject: 'Email Confirmation - Lenovo Go Pro Program', html: htmlTemplate });
 
@@ -423,48 +491,60 @@ export const forgotPassword = async (req: Request, res: Response) => {
     }
 
     // Generate a reset token
-    const token = crypto.randomBytes(32).toString('hex');
-    user.token = token;
-    user.token_purpose = 'PASSWORD_RESET';
-    user.token_expiration = new Date(Date.now() + 3600000); // 1 hour expiration
-    await user.save();
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Create or update verification token
+    await VerificationToken.create({
+      user_id: user.user_id,
+      token: resetToken,
+      purpose: 'PASSWORD_RESET',
+      expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
+    });
 
     // Send email
-    const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
-    await sendEmail({ to: email, bcc: process.env.EMAIL_BCC, subject: 'Password Reset', html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>` });
+    const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}`;
+    await sendEmail({ 
+      to: email, 
+      bcc: process.env.EMAIL_BCC, 
+      subject: 'Password Reset', 
+      html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>` 
+    });
 
     res.status(200).json({ message: 'Reset link sent to your email' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Something went wrong' });
   }
-}
+};
 
 export const userSignupConfirmation = async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
 
-    // Find user by token
-    const user = await User.findOne({
+    // Find verification token
+    const verificationToken = await VerificationToken.findOne({
       where: {
         token,
-        token_purpose: 'EMAIL_CONFIRMATION',
-        token_expiration: {
+        purpose: 'EMAIL_CONFIRMATION',
+        expires_at: {
           [Op.gt]: new Date()
         }
-      }
+      },
+      include: [{ model: User, as: 'user' }]
     });
 
-    if (!user) {
+    if (!verificationToken || !verificationToken.user) {
       return res.status(400).json({ message: 'Invalid or expired token' });
     }
 
-    // Update user status and points
+    const user = verificationToken.user;
+
+    // Update user status
     user.is_active = true;
-    user.token = '';
-    user.token_purpose = 'EMAIL_CONFIRMATION';
-    user.token_expiration = new Date();
     await user.save();
+
+    // Delete the used verification token
+    await verificationToken.destroy();
 
     // Update company points
     const company = await Company.findByPk(user.company_id);
@@ -477,7 +557,7 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
 
     htmlTemplate = htmlTemplate
       .replace('{{homePageLink}}', process.env.APP_URL as string)
-      .replace('{{faqLink}}', `${process.env.APP_URL}/faq`)
+      .replace('{{faqLink}}', `${process.env.APP_URL}/faq`);
 
     await sendEmail({ to: user.email, subject: 'Welcome to The Lenovo Go Pro Program', html: htmlTemplate });
 
@@ -492,33 +572,37 @@ export const resetPassword = async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
 
   try {
-    const user = await User.findOne({
+    const verificationToken = await VerificationToken.findOne({
       where: {
-        token: token,
-        token_expiration: {
+        token,
+        purpose: 'PASSWORD_RESET',
+        expires_at: {
           [Op.gt]: new Date(),
         },
       },
+      include: [{ model: User, as: 'user' }]
     });
 
-    if (!user) {
+    if (!verificationToken || !verificationToken.user) {
       return res.status(400).json({ message: 'Invalid or expired token' });
     }
 
+    const user = verificationToken.user;
+
     // Update the password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password_hash = hashedPassword; // You should hash the password here!
-    user.token = null as any;
-    user.token_purpose = null as any;
-    user.token_expiration = null as any;
+    user.password_hash = hashedPassword;
     await user.save();
+
+    // Delete the used verification token
+    await verificationToken.destroy();
 
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Something went wrong' });
   }
-}
+};
 
 export const updateUser = async (req: any, res: Response) => {
   try {
@@ -548,72 +632,93 @@ export const updateUser = async (req: any, res: Response) => {
 }
 
 export const deleteUser = async (req: Request, res: Response) => {
+  const transaction = await sequelize.transaction();
   try {
     const userId = req.params.user_id;
-    const user = await User.findByPk(userId)
+    const user = await User.findByPk(userId, { transaction })
 
     if (user) {
-      const company = await Company.findByPk(user.company_id)
+      const company = await Company.findByPk(user.company_id, { transaction })
       if (company) {
         company.total_points = (company.total_points || 0) - (user.accomplishment_total_points || 0)
-        await company.save();
+        await company.save({ transaction });
       }
+
+      // Create point transaction record for removed points
+      if ((user.total_points ?? 0) > 0) {
+        await PointTransaction.create({
+          user_id: user.user_id,
+          points: -(user.total_points ?? 0),
+          transaction_type: 'adjust',
+          description: 'Points removed due to user account deletion'
+        }, { transaction });
+      }
+
       user.is_active = false;
       user.total_points = 0;
       user.accomplishment_total_points = 0;
-      await user.save();
+      await user.save({ transaction });
+
+      await transaction.commit();
       res.status(200).json({ message: 'User deleted', status: res.status });
       return;
     } else {
+      await transaction.rollback();
       return res.status(404).json({ message: 'User not found' });
     }
   } catch (error: any) {
+    await transaction.rollback();
     console.error('Error delete user:', error);
 
-    // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
-    // Handle other types of errors
     res.status(500).json({ message: 'Something went wrong', error });
   }
 }
 
 export const activateUser = async (req: Request, res: Response) => {
+  const transaction = await sequelize.transaction();
   try {
     const { user_id } = req.body;
 
     let bonusSignupPoint = 0;
-
     const currentDate = dayjs();
-
-    // Define the target comparison date
     const targetDate = dayjs('2024-11-23');
 
     if (currentDate.isBefore(targetDate, 'day')) {
       bonusSignupPoint = 400;
     }
 
-    // Update the user's email and password
-    const [updatedRowsCount] = await User.update(
-      {
-          is_active: true,
-          total_points: bonusSignupPoint,
-          accomplishment_total_points: bonusSignupPoint,
-      },
-      {
-          where: { user_id: user_id },
-      }
-    );
-
-    if (updatedRowsCount === 0) {
-      return res.status(400).json({ message: 'User not found or no changes made.' });
+    const user = await User.findByPk(user_id, { transaction });
+    
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'User not found' });
     }
 
+    // Create point transaction record for signup bonus if applicable
+    if (bonusSignupPoint > 0) {
+      await PointTransaction.create({
+        user_id: user_id,
+        points: bonusSignupPoint,
+        transaction_type: 'earn',
+        description: 'Early registration bonus points'
+      }, { transaction });
+    }
+
+    await user.update({
+      is_active: true,
+      total_points: bonusSignupPoint,
+      accomplishment_total_points: bonusSignupPoint,
+    }, { transaction });
+
+    await transaction.commit();
     res.status(200).json({ message: 'User updated successfully' });
   } catch (error) {
+    await transaction.rollback();
     console.error('Error updating user:', error);
     res.status(500).json({ message: 'Something went wrong' });
   }

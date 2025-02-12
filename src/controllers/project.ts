@@ -3,6 +3,8 @@ import { Op } from 'sequelize';
 
 import { Project } from '../../models/Project';
 import { Form } from '../../models/Form';
+import { User } from '../../models/User';
+import { CustomRequest } from '../types/api';
 
 interface CustomRequest extends Request {
   user?: {
@@ -68,17 +70,21 @@ export const editProject = async (req: Request, res: Response) => {
 
 export const getProjectList = async (req: CustomRequest, res: Response) => {
   try {
-    const projects = await Project.findAll(
-      {
-        include: [
-          { model: Form, where: { status: { [Op.or]: ['approved', 'submitted'] } }, required: false }
-        ],
-        where: { user_id: req.user?.userId },
-        order: [['createdAt', 'DESC']]
-      }
-    )
+    const userId = req.user?.userId;
 
-    res.status(200).json({ message: 'List of projects', status: res.status, data: projects });
+    const projects = await Project.findAll({
+      include: [
+        {
+          model: Form,
+          where: { user_id: userId },
+          required: false,
+          attributes: ['status']
+        }
+      ],
+      order: [['createdAt', 'ASC']],
+    });
+
+    res.status(200).json({ message: 'Project list', status: res.status, data: projects });
   } catch (error: any) {
     console.error('Error fetching projects:', error);
 

@@ -16,25 +16,28 @@ import { Project } from '../../models/Project';
 import { sendEmail } from '../services/mail';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import { calculateBonusPoints } from '../utils/points';
+import { PointTransaction } from '../../models/PointTransaction';
 
 export const approveSubmission = async (req: any, res: Response) => {
   const form_id = req.params.form_id;
   const product_quantity = Number(req.body.product_quantity) || 0;
 
+  const transaction = await sequelize.transaction();
+
   try {
     if (form_id) {
       const [numOfAffectedRows, updatedForms] = await Form.update(
         { status: 'approved' },
-        { where: { form_id }, returning: true }
+        { where: { form_id }, returning: true, transaction }
       )
 
       if (numOfAffectedRows > 0) {
         const updatedForm = updatedForms[0]; // Access the first updated record
         let additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity);
 
-        const user = await User.findByPk(updatedForm.user_id);
-        const company = await Company.findByPk(user?.company_id);
-        const formType = await FormType.findByPk(updatedForm.form_type_id);
+        const user = await User.findByPk(updatedForm.user_id, { transaction });
+        const company = await Company.findByPk(user?.company_id, { transaction });
+        const formType = await FormType.findByPk(updatedForm.form_type_id, { transaction });
 
         // Check for completion bonus based on user type
         const currentDate = dayjs();
@@ -46,7 +49,8 @@ export const approveSubmission = async (req: any, res: Response) => {
               user_id: updatedForm.user_id,
               project_id: updatedForm.project_id,
               status: 'approved'
-            }
+            },
+            transaction
           });
 
           if (user?.user_type === 'T2' && approvedSubmissionsCount === 6) {
@@ -57,53 +61,50 @@ export const approveSubmission = async (req: any, res: Response) => {
         }
 
         if (user && formType) {
-          user.total_points = (user.total_points || 0) + formType.point_reward + additionalPoint;
-          user.accomplishment_total_points = (user.accomplishment_total_points || 0) + formType.point_reward + additionalPoint;
-          await user.save();
+          const basePoints = formType.point_reward;
+          const totalPoints = basePoints + additionalPoint;
+          
+          // Create point transaction record for base points
+          await PointTransaction.create({
+            user_id: user.user_id,
+            points: basePoints,
+            transaction_type: 'earn',
+            form_id: Number(form_id),
+            description: `Earned ${basePoints} base points for form submission: ${formType.form_name}`
+          }, { transaction });
+
+          // Create point transaction record for bonus points if any
+          if (additionalPoint > 0) {
+            await PointTransaction.create({
+              user_id: user.user_id,
+              points: additionalPoint,
+              transaction_type: 'earn',
+              form_id: Number(form_id),
+              description: `Earned ${additionalPoint} bonus points for form submission: ${formType.form_name}`
+            }, { transaction });
+          }
+
+          user.total_points = (user.total_points || 0) + totalPoints;
+          user.accomplishment_total_points = (user.accomplishment_total_points || 0) + totalPoints;
+          await user.save({ transaction });
         }
     
         if (company && formType) {
           company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint;
-          await company.save();
+          await company.save({ transaction });
         }
-    
-        // await logAction(userId, req.method, 1, 'FORM', req.ip, req.get('User-Agent'));
-    
-        await UserAction.create({
-          user_id: user!.user_id,
-          entity_type: 'FORM',
-          action_type: req.method,
-          form_id: Number(form_id),
-          // ip_address: req.ip,
-          // user_agent: req.get('User-Agent'),
-        });
 
-        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
-        let subjectEmail = 'Congratulations! Your Submission is Approved'
-
-        htmlTemplate = htmlTemplate
-          .replace('{{username}}', user!.username)
-
-        await sendEmail({ to: user!.email, subject: subjectEmail, html: htmlTemplate });
-
-      } else {
-        res.status(400).json({ message: 'No record found with the specified form_id.', status: res.status });
+        await transaction.commit();
+        res.status(200).json({ message: 'Form approved successfully', status: res.status });
+        return;
       }
-      
-      res.status(200).json({ message: 'Form approved', status: res.status });
-    } else {
-      res.status(400).json({ message: 'Form failed to approve', status: res.status });
-    }
-  } catch (error: any) {
-    console.error('Error creating form type:', error);
-
-    // Handle validation errors from Sequelize
-    if (error.name === 'SequelizeValidationError') {
-      const messages = error.errors.map((err: any) => err.message);
-      return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
-    // Handle other types of errors
+    await transaction.rollback();
+    res.status(404).json({ message: 'Form not found', status: res.status });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error approving form:', error);
     res.status(500).json({ message: 'Something went wrong', error });
   }
 };
@@ -230,6 +231,13 @@ export const formSubmission = async (req: any, res: Response) => {
     // If this is first submission and user was referred, add bonus points
     if (previousSubmissions === 0 && user?.referred_by) {
       // Add 200 points to the user
+      await PointTransaction.create({
+        user_id: user.user_id,
+        points: 200,
+        transaction_type: 'earn',
+        description: 'First submission referral bonus'
+      }, { transaction });
+
       await user.update({
         total_points: (user.total_points || 0) + 200,
         accomplishment_total_points: (user.accomplishment_total_points || 0) + 200
@@ -237,6 +245,13 @@ export const formSubmission = async (req: any, res: Response) => {
 
       // Add 100 points to the referrer
       if (user.referrer) {
+        await PointTransaction.create({
+          user_id: user.referrer.user_id,
+          points: 100,
+          transaction_type: 'earn',
+          description: `Referral bonus for ${user.username}'s first submission`
+        }, { transaction });
+
         await user.referrer.update({
           total_points: (user.referrer.total_points || 0) + 100,
           accomplishment_total_points: (user.referrer.accomplishment_total_points || 0) + 100

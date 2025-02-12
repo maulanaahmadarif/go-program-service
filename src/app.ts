@@ -4,6 +4,7 @@ import bodyParser, { json } from 'body-parser';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'path';
+import cookieParser from 'cookie-parser';
 
 import { sequelize } from './db';
 import router from './routes';
@@ -18,6 +19,7 @@ const app = express();
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Allowed origins array
 const allowedOrigins = [
@@ -30,17 +32,28 @@ const allowedOrigins = [
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true); // Allow the request
+      callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS')); // Deny the request
+      callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Add allowed methods as needed
-  credentials: true, // If you need cookies to be included in CORS requests
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true, // Required for cookies
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Set-Cookie'],
 };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
+
+// Cookie parser middleware with secure settings
+app.use(cookieParser());
+
+// Add security headers
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 
 app.use(express.static(path.join(process.cwd(), 'public')));
 app.use('/api', router)

@@ -22,6 +22,7 @@ import { Company } from './Company';
 import { UserAction } from './UserAction';       // Adjust paths based on your project structure
 import { PointTransaction } from './PointTransaction';  // Adjust paths based on your project structure
 import { Project } from './Project'
+import { VerificationToken } from './VerificationToken';
 
 
 export interface UserAttributes {
@@ -39,9 +40,6 @@ export interface UserAttributes {
   total_points?: number;
   accomplishment_total_points?: number;
   is_active?: boolean;
-  token?: string | null;
-  token_purpose?: 'EMAIL_CONFIRMATION' | 'PASSWORD_RESET' | null;
-  token_expiration?: Date | null;
   referral_code?: string;
   referred_by?: number;
   createdAt?: Date;
@@ -107,24 +105,12 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   public total_points?: number;
 
   @Default(false)
-  @Column(DataType.BOOLEAN) // Specify data type
+  @Column(DataType.BOOLEAN)
   public is_active?: boolean;
 
   @Default('CUSTOMER')
   @Column(DataType.ENUM('CUSTOMER', 'INTERNAL'))
   public level!: 'CUSTOMER' | 'INTERNAL';
-
-  @AllowNull(true)
-  @Column(DataType.STRING(255)) // Specify data type
-  public token!: string;
-
-  @AllowNull(true)
-  @Column(DataType.ENUM('EMAIL_CONFIRMATION', 'PASSWORD_RESET'))
-  public token_purpose!: 'EMAIL_CONFIRMATION' | 'PASSWORD_RESET';
-
-  @AllowNull(true)
-  @Column(DataType.DATE) // Specify data type
-  public token_expiration!: Date;
 
   @AllowNull(true)
   @Unique
@@ -163,6 +149,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
 
   @BelongsTo(() => User, 'referred_by')
   referrer?: User;
+
+  @HasMany(() => VerificationToken)
+  verification_tokens?: VerificationToken[];
 
   // static associate(models: any) {
   //   User.hasMany(models.Form, { foreignKey: 'user_id' });

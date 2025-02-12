@@ -10,6 +10,8 @@ import { PointTransaction } from "../models/PointTransaction";
 import { Redemption } from "../models/Redemption";
 import { Company } from "../models/Company";
 import { Project } from '../models/Project';
+import { VerificationToken } from '../models/VerificationToken';
+import { RefreshToken } from '../models/RefreshToken';
 
 const env = process.env.NODE_ENV || "development";
 
@@ -21,7 +23,7 @@ export const sequelize = new Sequelize({
   port: dbConfig.port,
   password: dbConfig.password,
   database: dbConfig.database,
-  models: [User, Product, FormType, Form, UserAction, PointTransaction, Redemption, Company, Project],
+  models: [User, Product, FormType, Form, UserAction, PointTransaction, Redemption, Company, Project, VerificationToken, RefreshToken],
   dialect: dbConfig.dialect,
   dialectOptions: {
     ssl: {
