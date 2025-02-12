@@ -24,13 +24,7 @@ const getCookieDomain = () => {
   if (process.env.NODE_ENV !== 'production') {
     return 'localhost';
   }
-  try {
-    const url = new URL(process.env.APP_URL as string);
-    return '.' + url.hostname; // Add dot prefix for subdomain support
-  } catch (error) {
-    console.warn('Invalid APP_URL, falling back to default domain');
-    return '.gopro-lenovoid.com';
-  }
+  return undefined; // Let the browser handle the domain for cross-site cookies
 };
 
 export const generateNewToken = async (req: Request, res: Response) => {
@@ -68,8 +62,6 @@ export const generateNewToken = async (req: Request, res: Response) => {
       companyId: payload.companyId
     });
 
-    const cookieDomain = getCookieDomain();
-
     // Start a transaction
     const transaction = await sequelize.transaction();
 
@@ -83,20 +75,20 @@ export const generateNewToken = async (req: Request, res: Response) => {
 
       await transaction.commit();
 
-      // Set new cookies
+      // Set new cookies with cross-site settings
       res.cookie('accessToken', newAccessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        domain: cookieDomain,
+        secure: true, // Always use secure in production
+        sameSite: 'none', // Required for cross-site cookies
+        domain: getCookieDomain(),
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
 
       res.cookie('refreshToken', newRefreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        domain: cookieDomain,
+        secure: true, // Always use secure in production
+        sameSite: 'none', // Required for cross-site cookies
+        domain: getCookieDomain(),
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
@@ -139,14 +131,12 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
     token.is_revoked = true;
     await token.save();
 
-    const cookieDomain = getCookieDomain();
-
     // Clear cookies with cross-domain support
     res.cookie('accessToken', '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: cookieDomain,
+      domain: getCookieDomain(),
       maxAge: 0
     });
 
@@ -154,7 +144,7 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: cookieDomain,
+      domain: getCookieDomain(),
       maxAge: 0
     });
 

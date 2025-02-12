@@ -79,22 +79,20 @@ export const userLogin = async (req: Request, res: Response) => {
       });
     }
 
-    const cookieDomain = getCookieDomain();
-
-    // Set cookies with cross-domain support
+    // Set cookies with cross-site settings
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: cookieDomain,
+      secure: true, // Always use secure in production
+      sameSite: 'none', // Required for cross-site cookies
+      domain: getCookieDomain(),
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: cookieDomain,
+      secure: true, // Always use secure in production
+      sameSite: 'none', // Required for cross-site cookies
+      domain: getCookieDomain(),
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
