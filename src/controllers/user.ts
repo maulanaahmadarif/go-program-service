@@ -84,7 +84,7 @@ export const userLogin = async (req: Request, res: Response) => {
       httpOnly: true,
       secure: true, // Always use secure in production
       sameSite: 'none', // Required for cross-site cookies
-      domain: getCookieDomain(),
+      // domain: getCookieDomain(),
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
@@ -92,7 +92,7 @@ export const userLogin = async (req: Request, res: Response) => {
       httpOnly: true,
       secure: true, // Always use secure in production
       sameSite: 'none', // Required for cross-site cookies
-      domain: getCookieDomain(),
+      // domain: getCookieDomain(),
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 

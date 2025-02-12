@@ -80,7 +80,7 @@ export const generateNewToken = async (req: Request, res: Response) => {
         httpOnly: true,
         secure: true, // Always use secure in production
         sameSite: 'none', // Required for cross-site cookies
-        domain: getCookieDomain(),
+        // domain: getCookieDomain(),
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
 
@@ -88,7 +88,7 @@ export const generateNewToken = async (req: Request, res: Response) => {
         httpOnly: true,
         secure: true, // Always use secure in production
         sameSite: 'none', // Required for cross-site cookies
-        domain: getCookieDomain(),
+        // domain: getCookieDomain(),
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
@@ -134,17 +134,17 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
     // Clear cookies with cross-domain support
     res.cookie('accessToken', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: getCookieDomain(),
+      secure: true, // Always use secure in production
+      sameSite: 'none', // Required for cross-site cookies
+      // domain: getCookieDomain(),
       maxAge: 0
     });
 
     res.cookie('refreshToken', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: getCookieDomain(),
+      secure: true, // Always use secure in production
+      sameSite: 'none', // Required for cross-site cookies
+      // domain: getCookieDomain(),
       maxAge: 0
     });
 
