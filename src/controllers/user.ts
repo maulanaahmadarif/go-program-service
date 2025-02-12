@@ -69,15 +69,17 @@ export const userLogin = async (req: Request, res: Response) => {
     // Set cookies with cross-site settings
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: true,
+      sameSite: 'none',
+      domain: '.gopro-lenovoid.com',
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: true,
+      sameSite: 'none',
+      domain: '.gopro-lenovoid.com',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 

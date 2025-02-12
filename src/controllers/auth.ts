@@ -70,15 +70,17 @@ export const generateNewToken = async (req: Request, res: Response) => {
       // Set new cookies with cross-site settings
       res.cookie('accessToken', newAccessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        secure: true,
+        sameSite: 'none',
+        domain: '.gopro-lenovoid.com',
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
 
       res.cookie('refreshToken', newRefreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        secure: true,
+        sameSite: 'none',
+        domain: '.gopro-lenovoid.com',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
@@ -124,15 +126,17 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
     // Clear cookies with cross-domain support
     res.cookie('accessToken', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: true,
+      sameSite: 'none',
+      domain: '.gopro-lenovoid.com',
       maxAge: 0
     });
 
     res.cookie('refreshToken', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: true,
+      sameSite: 'none',
+      domain: '.gopro-lenovoid.com',
       maxAge: 0
     });
 
