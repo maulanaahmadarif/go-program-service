@@ -6,12 +6,6 @@ import { Form } from '../../models/Form';
 import { User } from '../../models/User';
 import { CustomRequest } from '../types/api';
 
-interface CustomRequest extends Request {
-  user?: {
-    userId: number;
-  };
-}
-
 export const createProject = async (req: Request, res: Response) => {
   const { name, user_id } = req.body;
 
