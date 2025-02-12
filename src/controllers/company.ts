@@ -212,22 +212,34 @@ export const mergeCompany = async (req: Request, res: Response) => {
 };
 
 export const deleteCompany = async (req: Request, res: Response) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const companyId = req.params.company_id;
-    await Company.update({ status: 'deleted', total_points: 0 }, { where: { company_id: Number(companyId) } })
-    await User.update({ is_active: false, total_points: 0, accomplishment_total_points: 0 }, { where: { company_id: Number(companyId) } })
 
-    res.status(200).json({ message: 'Company deleted', status: res.status });
+    // Delete all users associated with the company
+    await User.destroy({
+      where: { company_id: Number(companyId) },
+      transaction
+    });
+
+    // Delete the company
+    await Company.destroy({
+      where: { company_id: Number(companyId) },
+      transaction
+    });
+
+    await transaction.commit();
+    res.status(200).json({ message: 'Company and associated users deleted successfully', status: res.status });
   } catch (error: any) {
-    console.error('Error delete company:', error);
+    await transaction.rollback();
+    console.error('Error deleting company:', error);
 
-    // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
-    // Handle other types of errors
     res.status(500).json({ message: 'Something went wrong', error });
   }
-}
+};

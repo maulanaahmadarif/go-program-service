@@ -605,12 +605,13 @@ export const deleteUser = async (req: Request, res: Response) => {
   const transaction = await sequelize.transaction();
   try {
     const userId = req.params.user_id;
-    const user = await User.findByPk(userId, { transaction })
+    const user = await User.findByPk(userId, { transaction });
 
     if (user) {
-      const company = await Company.findByPk(user.company_id, { transaction })
+      // Update company points before deleting user
+      const company = await Company.findByPk(user.company_id, { transaction });
       if (company) {
-        company.total_points = (company.total_points || 0) - (user.accomplishment_total_points || 0)
+        company.total_points = (company.total_points || 0) - (user.accomplishment_total_points || 0);
         await company.save({ transaction });
       }
 
@@ -624,13 +625,11 @@ export const deleteUser = async (req: Request, res: Response) => {
         }, { transaction });
       }
 
-      user.is_active = false;
-      user.total_points = 0;
-      user.accomplishment_total_points = 0;
-      await user.save({ transaction });
+      // Delete the user record
+      await user.destroy({ transaction });
 
       await transaction.commit();
-      res.status(200).json({ message: 'User deleted', status: res.status });
+      res.status(200).json({ message: 'User deleted successfully', status: res.status });
       return;
     } else {
       await transaction.rollback();
@@ -638,7 +637,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error delete user:', error);
+    console.error('Error deleting user:', error);
 
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
@@ -647,7 +646,7 @@ export const deleteUser = async (req: Request, res: Response) => {
 
     res.status(500).json({ message: 'Something went wrong', error });
   }
-}
+};
 
 export const activateUser = async (req: Request, res: Response) => {
   const transaction = await sequelize.transaction();
