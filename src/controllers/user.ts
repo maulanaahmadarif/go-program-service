@@ -610,6 +610,18 @@ export const deleteUser = async (req: Request, res: Response) => {
         }, { transaction });
       }
 
+      // Delete refresh tokens first
+      await RefreshToken.destroy({
+        where: { user_id: userId },
+        transaction
+      });
+
+      // Delete verification tokens
+      await VerificationToken.destroy({
+        where: { user_id: userId },
+        transaction
+      });
+
       // Delete the user record
       await user.destroy({ transaction });
 

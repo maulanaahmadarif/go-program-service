@@ -7,6 +7,8 @@ import { sequelize } from '../db';
 import { User } from '../../models/User';
 import { sendEmail } from '../services/mail';
 import dayjs from 'dayjs';
+import { RefreshToken } from '../../models/RefreshToken';
+import { VerificationToken } from '../../models/VerificationToken';
 
 export const createCompany = async (req: Request, res: Response) => {
   const { name, address, industry } = req.body;
@@ -216,6 +218,26 @@ export const deleteCompany = async (req: Request, res: Response) => {
 
   try {
     const companyId = req.params.company_id;
+
+    // Get all users in the company
+    const users = await User.findAll({
+      where: { company_id: Number(companyId) },
+      transaction
+    });
+
+    // Delete refresh tokens and verification tokens for all users
+    const userIds = users.map(user => user.user_id);
+    if (userIds.length > 0) {
+      await RefreshToken.destroy({
+        where: { user_id: userIds },
+        transaction
+      });
+
+      await VerificationToken.destroy({
+        where: { user_id: userIds },
+        transaction
+      });
+    }
 
     // Delete all users associated with the company
     await User.destroy({
