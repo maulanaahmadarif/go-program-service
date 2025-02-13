@@ -183,12 +183,10 @@ export const userSignup = async (req: Request, res: Response) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
     let normalize_company_id = company_id
-    let normalize_program_saled_id = program_saled_id;
 
     if (!company_id) {
       const customCompany = await Company.create({ name: custom_company, industry: 'Custom Company', total_points: 0 })
       normalize_company_id = customCompany.company_id;
-      normalize_program_saled_id = `${program_saled_id}-0${customCompany.company_id}`
     }
 
     // Check if referral code exists
@@ -210,7 +208,7 @@ export const userSignup = async (req: Request, res: Response) => {
       email,
       user_type,
       password_hash: hashedPassword,
-      program_saled_id: normalize_program_saled_id,
+      program_saled_id: '',
       phone_number,
       job_title,
       total_points: 0,
@@ -239,19 +237,6 @@ export const userSignup = async (req: Request, res: Response) => {
       company_point: user.company?.total_points,
       referral_code: user.referral_code
     };
-
-    const company = await Company.findByPk(company_id);
-
-    if (company) {
-      company.total_points = company.total_points as number + 0;
-      await company.save();
-    }
-
-    // If user was referred, add points to both users after email confirmation
-    if (referrerId) {
-      // We'll add the points when the user confirms their email
-      // This is handled in the userSignupConfirmation endpoint
-    }
 
     let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'emailConfirmation.html'), 'utf-8');
 
