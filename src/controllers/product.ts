@@ -5,14 +5,7 @@ import { Op } from 'sequelize';
 
 export const getProductList = async (req: CustomRequest, res: Response) => {
   try {
-    const products = await Product.findAll({
-      where: {
-        stock_quantity: {
-          [Op.gt]: 0
-        }
-      },
-      order: [['createdAt', 'ASC']],
-    });
+    const products = await Product.findAll({ order: [['points_required', 'ASC']] })
 
     res.status(200).json({ message: 'Product list', status: res.status, data: products });
   } catch (error: any) {

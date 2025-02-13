@@ -5,35 +5,31 @@ import { Form } from '../../models/Form';
 import { FormType } from '../../models/FormType';
 import { Project } from '../../models/Project';
 import { CustomRequest } from '../types/api';
+import { Redemption } from '../../models/Redemption';
 
 export const getUserActionList = async (req: CustomRequest, res: Response) => {
   try {
-    const userId = req.user?.userId;
-
-    const list = await UserAction.findAll({
-      where: { user_id: userId },
+    const user_id = req.user?.userId;
+    
+    const actions = await UserAction.findAll({
+      where: { user_id },
       include: [
         {
           model: Form,
+          attributes: ['form_type_id'],
           include: [
-            {
-              model: FormType,
-              attributes: ['form_name']
-            },
-            {
-              model: Project,
-              attributes: ['name']
-            }
+            { model: FormType, attributes: ['form_name'] },
+            { model: Project, attributes: ['project_id', 'name'] }
           ]
         },
         {
-          model: User,
-          attributes: ['username']
+          model: Redemption
         }
       ],
-      order: [['createdAt', 'DESC']],
-    });
-    res.status(200).json({ message: 'Action list', status: res.status, data: list });
+      order: [['createdAt', 'DESC']]
+    })
+
+    res.status(200).json({ message: 'List of user action', status: res.status, data: actions });
   } catch (error: any) {
     console.error('Error delete user:', error);
 
