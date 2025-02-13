@@ -66,17 +66,15 @@ export const getProjectList = async (req: CustomRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
 
-    const projects = await Project.findAll({
-      include: [
-        {
-          model: Form,
-          where: { user_id: userId },
-          required: false,
-          attributes: ['status']
-        }
-      ],
-      order: [['createdAt', 'ASC']],
-    });
+    const projects = await Project.findAll(
+      {
+        include: [
+          { model: Form, where: { status: { [Op.or]: ['approved', 'submitted'] } }, required: false }
+        ],
+        where: { user_id: req.user?.userId },
+        order: [['createdAt', 'DESC']]
+      }
+    )
 
     res.status(200).json({ message: 'Project list', status: res.status, data: projects });
   } catch (error: any) {
