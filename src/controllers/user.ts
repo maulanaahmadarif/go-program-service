@@ -25,7 +25,8 @@ export const userLogin = async (req: Request, res: Response) => {
   try {
     // Validate email domain
     const emailDomain = email.split('@')[1];
-    if (emailDomain !== 'fokustarget.com') {
+    const allowedDomains = ['fokustarget.com', 'go-program.com'];
+    if (!allowedDomains.includes(emailDomain)) {
       return res.status(400).json({ message: 'Operation not allowed' });
     }
 
