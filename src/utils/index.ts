@@ -41,6 +41,9 @@ export function formatJsonToLabelValueString(json: JsonItem[]): string {
     if (productData.document) {
       result += `Document: ${productData.document}\n`;
     }
+    if (productData.excelDocument) {
+      result += `Excel Document: ${productData.excelDocument}\n`;
+    }
   }
 
   return result.trim();
@@ -60,6 +63,7 @@ type LabelMapping = {
 };
 
 const labelMap: LabelMapping = {
+  excelDocument: 'Excel Document',
   document: 'Document',
   productType: 'Product Type',
   productCategory: 'Product Category',
