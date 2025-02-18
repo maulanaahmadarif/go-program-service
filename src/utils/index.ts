@@ -44,6 +44,12 @@ export function formatJsonToLabelValueString(json: JsonItem[]): string {
     if (productData.excelDocument) {
       result += `Excel Document: ${productData.excelDocument}\n`;
     }
+    if (productData.description) {
+      result += `Product Description: ${productData.description}\n`;
+    }
+    if (productData.partNumber) {
+      result += `Product Part Number: ${productData.partNumber}\n`;
+    }
   }
 
   return result.trim();
