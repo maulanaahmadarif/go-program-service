@@ -312,7 +312,7 @@ export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) =
         user_id,
         product_id: 7,
         status: {
-          [Op.in]: ['active', 'approved'] // Only check active or approved redemptions
+          [Op.in]: ['active', 'approved', 'rejected'] // Only check active or approved redemptions
         }
       }
     });
