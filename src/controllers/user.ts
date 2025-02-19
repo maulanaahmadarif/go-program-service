@@ -17,6 +17,9 @@ import { generateTokens } from './auth';
 import { VerificationToken } from '../../models/VerificationToken';
 import { PointTransaction } from '../../models/PointTransaction';
 import { sequelize } from '../db';
+import { Redemption } from '../../models/Redemption';
+import { UserAction } from '../../models/UserAction';
+import { Form } from '../../models/Form';
 
 
 export const userLogin = async (req: Request, res: Response) => {
@@ -612,6 +615,30 @@ export const deleteUser = async (req: Request, res: Response) => {
 
       // Delete verification tokens
       await VerificationToken.destroy({
+        where: { user_id: userId },
+        transaction
+      });
+
+      // Delete redemption records
+      await Redemption.destroy({
+        where: { user_id: userId },
+        transaction
+      });
+
+      // Delete point transactions
+      await PointTransaction.destroy({
+        where: { user_id: userId },
+        transaction
+      });
+
+      // Delete user actions
+      await UserAction.destroy({
+        where: { user_id: userId },
+        transaction
+      });
+
+      // Delete forms
+      await Form.destroy({
         where: { user_id: userId },
         transaction
       });
