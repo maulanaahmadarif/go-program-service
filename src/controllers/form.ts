@@ -369,7 +369,7 @@ export const getFormByProject = async (req: any, res: Response) => {
 
 export const getFormSubmission = async (req: Request, res: Response) => {
   try {
-    const { company_id, user_id, start_date, end_date, status } = req.query;
+    const { company_id, user_id, start_date, end_date, status, user_type } = req.query;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
@@ -383,6 +383,17 @@ export const getFormSubmission = async (req: Request, res: Response) => {
 
     if (user_id) {
       userWhere.user_id = user_id;
+    }
+
+    // Add user_type filter
+    if (user_type) {
+      if (Array.isArray(user_type)) {
+        userWhere.user_type = {
+          [Op.in]: user_type
+        };
+      } else {
+        userWhere.user_type = user_type;
+      }
     }
 
     const whereClause: any = {};
