@@ -768,3 +768,125 @@ export const bulkGenerateReferralCodes = async (req: Request, res: Response) => 
     res.status(500).json({ message: 'An error occurred while generating referral codes' });
   }
 };
+
+export const downloadUserList = async (req: Request, res: Response) => {
+  try {
+    const { company_id, user_type, start_date, end_date } = req.query;
+
+    const whereCondition: any = { level: 'CUSTOMER', is_active: true };
+
+    if (company_id) {
+      whereCondition.company_id = company_id;
+      delete whereCondition.is_active;
+    }
+
+    if (user_type) {
+      whereCondition.user_type = user_type;
+    }
+
+    // Add date range filters if provided
+    if (start_date) {
+      whereCondition.createdAt = {
+        ...(whereCondition.createdAt || {}),
+        [Op.gte]: new Date(start_date as string),
+      };
+    }
+
+    if (end_date) {
+      whereCondition.createdAt = {
+        ...(whereCondition.createdAt || {}),
+        [Op.lte]: new Date(end_date as string),
+      };
+    }
+
+    const sortField: string = (req.query.sortBy as string) || 'total_points';
+    const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
+
+    const users = await User.findAll({
+      where: whereCondition,
+      attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
+      include: [
+        {
+          model: User,
+          as: 'referrer',
+          attributes: ['username', 'referral_code'],
+        },
+        {
+          model: Company,
+          attributes: ['name'],
+        }
+      ],
+      order: [[sortField, orderDirection]]
+    });
+
+    // Transform the data
+    const transformedUsers = users.map(user => {
+      const plainUser = user.get({ plain: true }) as any;
+      return {
+        ...plainUser,
+        referrer_username: plainUser.referrer?.username || null,
+        company_name: plainUser.company?.name || null,
+        referral_code: plainUser.user_type === 'T2' ? plainUser.referrer?.referral_code || null : plainUser.referral_code,
+        created_at: dayjs(plainUser.createdAt).format('DD MMM YYYY HH:mm')
+      };
+    });
+
+    // Create a new workbook and worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Users');
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'No', key: 'no', width: 5 },
+      { header: 'Username', key: 'username', width: 15 },
+      { header: 'Email', key: 'email', width: 25 },
+      { header: 'Company', key: 'company_name', width: 20 },
+      { header: 'User Type', key: 'user_type', width: 10 },
+      { header: 'Phone Number', key: 'phone_number', width: 15 },
+      { header: 'Job Title', key: 'job_title', width: 20 },
+      { header: 'Total Points', key: 'total_points', width: 12 },
+      { header: 'Accomplishment Points', key: 'accomplishment_total_points', width: 12 },
+      { header: 'Referral Code', key: 'referral_code', width: 15 },
+      { header: 'Referred By', key: 'referrer_username', width: 15 },
+      { header: 'Created At', key: 'created_at', width: 20 }
+    ];
+
+    // Add data to worksheet
+    transformedUsers.forEach((user, index) => {
+      worksheet.addRow({
+        no: index + 1,
+        username: user.username,
+        email: user.email,
+        company_name: user.company_name,
+        user_type: getUserType(user.user_type),
+        phone_number: user.phone_number || '-',
+        job_title: user.job_title || '-',
+        total_points: user.total_points || 0,
+        accomplishment_total_points: user.accomplishment_total_points || 0,
+        referral_code: user.referral_code || '-',
+        referrer_username: user.referrer_username || '-',
+        created_at: user.created_at
+      });
+    });
+
+    // Style the header row
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=users.xlsx');
+
+    // Write to response
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error: any) {
+    console.error('Error downloading users:', error);
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+};
