@@ -1,4 +1,4 @@
-import express from 'express';
+import express from "express";
 
 // import authenticate from '../middleware/auth';
 import {
@@ -14,24 +14,25 @@ import {
   deleteUser,
   activateUser,
   bulkGenerateReferralCodes,
-  downloadUserList
-} from '../controllers/user';
-import authenticate from '../middleware/auth';
+  downloadUserList,
+} from "../controllers/user";
+import authenticate from "../middleware/auth";
+import checkDomain from "../middleware/domain";
 
 const router = express.Router();
 
-router.post('/login', userLogin);
-router.post('/signup', userSignup);
+router.post("/login", checkDomain, userLogin);
+router.post("/signup", checkDomain, userSignup);
 // router.post('/add-internal-user', addInternalUser)
-router.get('/profile', authenticate, getUserProfile);
-router.get('/list', getUserList);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
-router.post('/update', authenticate, updateUser);
-router.get('/confirmation/:token', userSignupConfirmation)
-router.delete('/delete/:user_id', authenticate, deleteUser)
-router.post('/activate', authenticate, activateUser)
+router.get("/profile", authenticate, getUserProfile);
+router.get("/list", getUserList);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+router.post("/update", authenticate, updateUser);
+router.get("/confirmation/:token", userSignupConfirmation);
+router.delete("/delete/:user_id", authenticate, deleteUser);
+router.post("/activate", authenticate, activateUser);
 // router.post('/bulk-generate-referral-codes', bulkGenerateReferralCodes)
-router.get('/download', downloadUserList)
+router.get("/download", downloadUserList);
 
 export default router;
