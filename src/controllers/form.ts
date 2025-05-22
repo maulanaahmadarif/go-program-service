@@ -33,17 +33,51 @@ export const approveSubmission = async (req: any, res: Response) => {
 
       if (numOfAffectedRows > 0) {
         const updatedForm = updatedForms[0]; // Access the first updated record
-        let additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity);
+
+        // Check if form contains Aura Edition products
+        let isAuraEdition = false;
+        if (updatedForm.form_data && Array.isArray(updatedForm.form_data)) {
+          const productsEntry = updatedForm.form_data.find(entry => entry.label === 'products');
+          if (productsEntry && Array.isArray(productsEntry.value)) {
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+          }
+        }
+
+        let additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity, isAuraEdition);
 
         const user = await User.findByPk(updatedForm.user_id, { transaction });
         const company = await Company.findByPk(user?.company_id, { transaction });
         const formType = await FormType.findByPk(updatedForm.form_type_id, { transaction });
 
+        // Check if this is user's first approved submission
+        const previousApprovedSubmissions = await Form.count({
+          where: {
+            user_id: updatedForm.user_id,
+            status: 'approved'
+          },
+          transaction
+        });
+
+        if (previousApprovedSubmissions === 1 && user) {
+          const bonusRegistrationPoint = 400;
+          // Add bonus points for first submission
+          await PointTransaction.create({
+            user_id: user.user_id,
+            points: bonusRegistrationPoint,
+            transaction_type: 'earn',
+            description: 'First submission referral bonus'
+          }, { transaction });
+
+          additionalPoint += bonusRegistrationPoint;
+        }
+
         // Check for completion bonus based on user type
         const currentDate = dayjs();
-        const targetDate = dayjs('2025-03-14');
+        const targetDate = dayjs('2025-06-20');
         
         if (currentDate.isBefore(targetDate)) {
+          const additionalPointCompletionPoint = 200;
+          
           const approvedSubmissionsCount = await Form.count({
             where: {
               user_id: updatedForm.user_id,
@@ -53,10 +87,44 @@ export const approveSubmission = async (req: any, res: Response) => {
             transaction
           });
 
-          if (user?.user_type === 'T2' && approvedSubmissionsCount === 6) {
-            additionalPoint += 200; // Add bonus points for T2 user completing 6 submissions
+          if (user?.user_type === 'T2' && approvedSubmissionsCount === 5) {
+            additionalPoint += additionalPointCompletionPoint; // Add bonus points for T2 user completing 6 submissions
           } else if (user?.user_type === 'T1' && approvedSubmissionsCount === 4) {
-            additionalPoint += 200; // Add bonus points for T1 user completing 4 submissions
+            additionalPoint += additionalPointCompletionPoint; // Add bonus points for T1 user completing 4 submissions
+          }
+        }
+
+        // Check for form type 4 bonus points
+        if (updatedForm.form_type_id === 4) {
+          const type4ApprovedCount = await Form.count({
+            where: {
+              user_id: updatedForm.user_id,
+              form_type_id: 4,
+              status: 'approved'
+            },
+            transaction
+          });
+
+          let bonusPoints = 0;
+          if (type4ApprovedCount === 30) {
+            bonusPoints = 6000;
+          } else if (type4ApprovedCount === 40) {
+            bonusPoints = 8000;
+          } else if (type4ApprovedCount === 50) {
+            bonusPoints = 10000;
+          }
+
+          if (bonusPoints > 0 && user) {
+            // Create point transaction record for form type 4 milestone bonus
+            await PointTransaction.create({
+              user_id: user.user_id,
+              points: bonusPoints,
+              transaction_type: 'earn',
+              form_id: Number(form_id),
+              description: `Bonus points for achieving ${type4ApprovedCount} approved form type 4 submissions`
+            }, { transaction });
+
+            additionalPoint += bonusPoints;
           }
         }
 
@@ -203,14 +271,6 @@ export const formSubmission = async (req: any, res: Response) => {
   let isProjectFormCompleted = false;
   
   try {
-    // Check if this is user's first submission
-    const previousSubmissions = await Form.count({
-      where: {
-        user_id: userId,
-      },
-      transaction
-    });
-
     const submission = await Form.create({
       user_id: userId,
       form_type_id,
@@ -218,62 +278,6 @@ export const formSubmission = async (req: any, res: Response) => {
       project_id,
       status: 'submitted'
     })
-
-    // Update user points based on the form submission
-    const user = await User.findByPk(userId, { 
-      transaction,
-      include: [{
-        model: User,
-        as: 'referrer'
-      }]
-    });
-
-    // If this is first submission and user was referred, add bonus points
-    if (previousSubmissions === 0 && user?.referred_by) {
-      // Add 200 points to the user
-      await PointTransaction.create({
-        user_id: user.user_id,
-        points: 200,
-        transaction_type: 'earn',
-        description: 'First submission referral bonus'
-      }, { transaction });
-
-      await user.update({
-        total_points: (user.total_points || 0) + 200,
-        accomplishment_total_points: (user.accomplishment_total_points || 0) + 200
-      }, { transaction });
-
-      // Add 100 points to the referrer
-      if (user.referrer) {
-        await PointTransaction.create({
-          user_id: user.referrer.user_id,
-          points: 100,
-          transaction_type: 'earn',
-          description: `Referral bonus for ${user.username}'s first submission`
-        }, { transaction });
-
-        await user.referrer.update({
-          total_points: (user.referrer.total_points || 0) + 100,
-          accomplishment_total_points: (user.referrer.accomplishment_total_points || 0) + 100
-        }, { transaction });
-
-        // Update referrer's company points
-        const referrerCompany = await Company.findByPk(user.referrer.company_id, { transaction });
-        if (referrerCompany) {
-          await referrerCompany.update({
-            total_points: (referrerCompany.total_points || 0) + 100
-          }, { transaction });
-        }
-      }
-
-      // Update user's company points
-      const userCompany = await Company.findByPk(user.company_id, { transaction });
-      if (userCompany) {
-        await userCompany.update({
-          total_points: (userCompany.total_points || 0) + 200
-        }, { transaction });
-      }
-    }
 
     const formsCount = await Form.count(
       {
@@ -288,12 +292,20 @@ export const formSubmission = async (req: any, res: Response) => {
       }
     )
 
+    const user = await User.findByPk(userId, { 
+      transaction,
+      include: [{
+        model: User,
+        as: 'referrer'
+      }]
+    });
+
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-03-14');
+    const targetDate = dayjs('2025-06-30');
   
     if (currentDate.isBefore(targetDate, 'day')) {
       if (user?.user_type === 'T2') {
-        if (formsCount === 6) {
+        if (formsCount === 5) {
           isProjectFormCompleted = true;
         }
       } else if (user?.user_type === 'T1') {
@@ -317,7 +329,7 @@ export const formSubmission = async (req: any, res: Response) => {
       status: res.status, 
       data: { 
         form_completed: isProjectFormCompleted,
-        first_submission_bonus: previousSubmissions === 0 && user?.referred_by ? true : false
+        first_submission_bonus: false
       } 
     });
   } catch (error: any) {
@@ -491,8 +503,17 @@ export const getFormSubmission = async (req: Request, res: Response) => {
           }
         }
 
+        // Check if form contains Aura Edition products
+        let isAuraEdition = false;
+        if (plainForm.form_data && Array.isArray(plainForm.form_data)) {
+          const productsEntry = plainForm.form_data.find((entry: any) => entry.label === 'products');
+          if (productsEntry && Array.isArray(productsEntry.value)) {
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+          }
+        }
+
         // Calculate bonus points using utility function
-        bonus_points = calculateBonusPoints(plainForm.form_type.form_type_id, product_quantity);
+        bonus_points = calculateBonusPoints(plainForm.form_type.form_type_id, product_quantity, isAuraEdition);
       }
 
       return {
@@ -529,6 +550,63 @@ export const getFormSubmission = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Something went wrong', error });
   } 
 }
+
+export const getFormSubmissionByUserId = async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const { form_type_id } = req.query;
+
+    const whereClause: any = {
+      user_id: userId,
+      status: 'approved'
+    };
+
+    if (form_type_id) {
+      whereClause.form_type_id = form_type_id;
+    }
+
+    const forms = await Form.findAll({
+      attributes: ['form_id', 'createdAt'],
+      where: whereClause,
+      include: [
+        {
+          model: Project,
+          attributes: ['name']
+        },
+        {
+          model: FormType,
+          attributes: ['form_name']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const transformedForms = forms.map(form => {
+      const plainForm = form.get({ plain: true }) as any;
+      return {
+        form_id: plainForm.form_id,
+        project_name: plainForm.project.name,
+        form_name: plainForm.form_type.form_name,
+        submitted_at: plainForm.createdAt
+      };
+    });
+
+    res.status(200).json({ 
+      message: 'List of approved user forms', 
+      status: res.status, 
+      data: transformedForms
+    });
+  } catch (error: any) {
+    console.error('Error fetching user forms:', error);
+
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    res.status(500).json({ message: 'Something went wrong', error });
+  }
+};
 
 export const downloadSubmission = async (req: Request, res: Response) => {
   try {
@@ -620,7 +698,16 @@ export const downloadSubmission = async (req: Request, res: Response) => {
           item.form_data[0]?.value && Array.isArray(item.form_data[0].value) ? 
           item.form_data[0].value[0]?.numberOfQuantity || 0 : 0;
 
-        const bonus_points = calculateBonusPoints(item.form_type.form_type_id, product_quantity);
+        // Check if form contains Aura Edition products
+        let isAuraEdition = false;
+        if (item.form_data && Array.isArray(item.form_data)) {
+          const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
+          if (productsEntry && Array.isArray(productsEntry.value)) {
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+          }
+        }
+
+        const bonus_points = calculateBonusPoints(item.form_type.form_type_id, product_quantity, isAuraEdition);
         points_gained = item.form_type.point_reward + bonus_points;
       }
 
@@ -707,7 +794,16 @@ export const getReport = async (req: Request, res: Response) => {
       }
     }
 
-    const bonus_point = calculateBonusPoints(item.form_type.form_type_id, product_quantity);
+    // Check if form contains Aura Edition products
+    let isAuraEdition = false;
+    if (item.form_data && Array.isArray(item.form_data)) {
+      const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
+      if (productsEntry && Array.isArray(productsEntry.value)) {
+        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+      }
+    }
+
+    const bonus_point = calculateBonusPoints(item.form_type.form_type_id, product_quantity, isAuraEdition);
 
     return {
       username: item.user.username,

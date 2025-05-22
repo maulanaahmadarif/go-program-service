@@ -10,6 +10,7 @@ import {
 	downloadSubmission,
 	approveSubmission,
 	getReport,
+	getFormSubmissionByUserId,
 } from "../controllers/form";
 import authenticate from "../middleware/auth";
 import checkDomain from "../middleware/domain";
@@ -21,6 +22,7 @@ router.post("/submit", authenticate, checkDomain, formSubmission);
 router.get("/project", authenticate, getFormByProject);
 router.delete("/delete/:form_id", authenticate, deleteForm);
 router.get("/submission", authenticate, getFormSubmission);
+router.get("/submission/user", authenticate, getFormSubmissionByUserId);
 router.post("/approve/:form_id", authenticate, approveSubmission);
 router.get("/submission/download", authenticate, downloadSubmission);
 router.get("/submission/report", getReport);

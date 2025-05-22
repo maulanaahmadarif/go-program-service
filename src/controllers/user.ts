@@ -157,6 +157,14 @@ export const userSignup = async (req: Request, res: Response) => {
 			referral_code,
 		} = req.body;
 
+		// Check if email is from fokustarget.com domain
+		if (!email.toLowerCase().endsWith('@fokustarget.com')) {
+			return res.status(401).json({ 
+				message: 'Operation not allowed',
+				status: res.status
+			});
+		}
+
 		// Check if email already exists
 		const existingEmail = await User.findOne({ where: { email } });
 		if (existingEmail) {
@@ -605,29 +613,81 @@ export const resetPassword = async (req: Request, res: Response) => {
 };
 
 export const updateUser = async (req: any, res: Response) => {
+	const transaction = await sequelize.transaction();
 	try {
 		const userId = req.user?.userId;
-		const { fullname } = req.body;
+		const { fullname, points } = req.body;
 
-		// Update the user's email and password
+		const updateData: any = {};
+		
+		// Only update fullname if it's provided and not empty
+		if (fullname && fullname.trim()) {
+			updateData.fullname = fullname;
+		}
+
+		// Update the user's data
 		const [updatedRowsCount] = await User.update(
-			{
-				fullname,
-			},
+			updateData,
 			{
 				where: { user_id: userId },
+				transaction
 			},
 		);
 
 		if (updatedRowsCount === 0) {
+			await transaction.rollback();
 			return res
 				.status(400)
 				.json({ message: "User not found or no changes made." });
 		}
 
-		console.log(`Updated ${updatedRowsCount} user(s)`);
+		// Handle points update if provided
+		if (points !== undefined) {
+			const user = await User.findByPk(userId, { transaction });
+			if (!user) {
+				await transaction.rollback();
+				return res.status(404).json({ message: "User not found" });
+			}
+
+			// Create point transaction record
+			await PointTransaction.create(
+				{
+					user_id: userId,
+					points: points,
+					transaction_type: "adjust",
+					description: "Points adjusted via user update",
+				},
+				{ transaction }
+			);
+
+			// Update user's total points and accomplishment points
+			const currentPoints = user.total_points || 0;
+			const currentAccomplishmentPoints = user.accomplishment_total_points || 0;
+			await user.update(
+				{ 
+					total_points: currentPoints + points,
+					accomplishment_total_points: currentAccomplishmentPoints + points
+				},
+				{ transaction }
+			);
+
+			// Update company total points
+			if (user.company_id) {
+				const company = await Company.findByPk(user.company_id, { transaction });
+				if (company) {
+					const currentCompanyPoints = company.total_points || 0;
+					await company.update(
+						{ total_points: currentCompanyPoints + points },
+						{ transaction }
+					);
+				}
+			}
+		}
+
+		await transaction.commit();
 		res.status(200).json({ message: "User updated successfully" });
 	} catch (error) {
+		await transaction.rollback();
 		console.error("Error updating user:", error);
 		res.status(500).json({ message: "Something went wrong" });
 	}
@@ -729,14 +789,6 @@ export const activateUser = async (req: Request, res: Response) => {
 	try {
 		const { user_id } = req.body;
 
-		let bonusSignupPoint = 0;
-		const currentDate = dayjs();
-		const targetDate = dayjs("2024-11-23");
-
-		if (currentDate.isBefore(targetDate, "day")) {
-			bonusSignupPoint = 400;
-		}
-
 		const user = await User.findByPk(user_id, { transaction });
 
 		if (!user) {
@@ -744,24 +796,9 @@ export const activateUser = async (req: Request, res: Response) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// Create point transaction record for signup bonus if applicable
-		if (bonusSignupPoint > 0) {
-			await PointTransaction.create(
-				{
-					user_id: user_id,
-					points: bonusSignupPoint,
-					transaction_type: "earn",
-					description: "Early registration bonus points",
-				},
-				{ transaction },
-			);
-		}
-
 		await user.update(
 			{
 				is_active: true,
-				total_points: bonusSignupPoint,
-				accomplishment_total_points: bonusSignupPoint,
 			},
 			{ transaction },
 		);
@@ -836,6 +873,81 @@ export const bulkGenerateReferralCodes = async (
 		res
 			.status(500)
 			.json({ message: "An error occurred while generating referral codes" });
+	}
+};
+
+export const getReferredUsers = async (req: any, res: Response) => {
+	try {
+		const userId = req.user?.userId;
+
+		// First get the current user to check their referral code
+		const currentUser = await User.findByPk(userId);
+		if (!currentUser || !currentUser.referral_code) {
+			return res.status(404).json({ 
+				message: "User not found or doesn't have a referral code"
+			});
+		}
+
+		// Find all users who used this referral code and have submitted at least one form
+		const referredUsers = await User.findAll({
+			where: {
+				referred_by: userId
+			},
+			attributes: [
+				'user_id',
+				'username',
+				'fullname',
+				'email',
+				'user_type',
+				'total_points',
+				'createdAt'
+			],
+			include: [
+				{
+					model: Company,
+					attributes: ['name']
+				},
+				{
+					model: Form,
+					attributes: [],
+					required: true, // This ensures users have at least one form
+					where: {
+						status: {
+							[Op.or]: ['approved']
+						}
+					}
+				}
+			],
+			order: [['createdAt', 'DESC']]
+		});
+
+		// Transform the response
+		const transformedUsers = referredUsers.map(user => {
+			const plainUser = user.get({ plain: true }) as any;
+			return {
+				user_id: plainUser.user_id,
+				username: plainUser.username,
+				fullname: plainUser.fullname || '-',
+				email: plainUser.email,
+				user_type: plainUser.user_type,
+				company_name: plainUser.company?.name || '-',
+				total_points: plainUser.total_points || 0,
+				joined_at: dayjs(plainUser.createdAt).format('DD MMM YYYY HH:mm')
+			};
+		});
+
+		res.status(200).json({
+			message: "List of referred users with form submissions",
+			referral_code: currentUser.referral_code,
+			total_referrals: transformedUsers.length,
+			data: transformedUsers
+		});
+
+	} catch (error) {
+		console.error("Error fetching referred users:", error);
+		res.status(500).json({ 
+			message: "An error occurred while fetching referred users"
+		});
 	}
 };
 

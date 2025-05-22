@@ -1,4 +1,4 @@
-export const calculateBonusPoints = (formTypeId: number, product_quantity: number): number => {
+export const calculateBonusPoints = (formTypeId: number, product_quantity: number, isAuraEdition: boolean = false): number => {
   let bonus_points = 0;
 
   if (formTypeId === 1) {
@@ -65,6 +65,17 @@ export const calculateBonusPoints = (formTypeId: number, product_quantity: numbe
     } else if (product_quantity > 300) {
       bonus_points = 200;
     }
+  }
+
+  // Apply Aura Edition multiplier if applicable
+  if (isAuraEdition) {
+    let multiplier = 5; // Default multiplier for 1-50 quantity
+    if (product_quantity > 50 && product_quantity <= 300) {
+      multiplier = 7;
+    } else if (product_quantity > 300) {
+      multiplier = 10;
+    }
+    bonus_points *= multiplier;
   }
 
   return bonus_points;

@@ -16,6 +16,7 @@ import {
 import { Optional } from "sequelize";
 
 import { Redemption } from './Redemption';  // Adjust paths based on your project structure
+import { FortuneWheelSpin } from './FortuneWheelSpin';
 
 export interface ProductTypeAttributes {
   product_id?: number;
@@ -26,6 +27,7 @@ export interface ProductTypeAttributes {
   image_url?: string;
   size?: string[];
   category: string;
+  is_active: boolean;
   createdAt?: Date;
   updatedAt?: Date;  
 }
@@ -72,6 +74,11 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
   @Column(DataType.STRING(100))
   public category?: string;
 
+  @AllowNull(false)
+  @Default(true)
+  @Column(DataType.BOOLEAN)
+  public is_active!: boolean;
+
   // Timestamps
   @CreatedAt
   public readonly createdAt!: Date;
@@ -82,6 +89,9 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
   // Define associations
   @HasMany(() => Redemption)
   redemption!: Redemption[];
+
+  @HasMany(() => FortuneWheelSpin)
+  fortune_wheel_spins!: FortuneWheelSpin[];
 
   // static associate(models: any) {
   //   Product.hasMany(models.Redemption, { foreignKey: 'product_id' });

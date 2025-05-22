@@ -15,6 +15,7 @@ import {
   activateUser,
   bulkGenerateReferralCodes,
   downloadUserList,
+  getReferredUsers,
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
 import checkDomain from "../middleware/domain";
@@ -22,10 +23,11 @@ import checkDomain from "../middleware/domain";
 const router = express.Router();
 
 router.post("/login", userLogin);
-router.post("/signup", checkDomain, userSignup);
+router.post("/signup", userSignup);
 // router.post('/add-internal-user', addInternalUser)
 router.get("/profile", authenticate, getUserProfile);
 router.get("/list", getUserList);
+router.get("/referred", authenticate, getReferredUsers);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 router.post("/update", authenticate, updateUser);

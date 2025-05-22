@@ -5,9 +5,14 @@ import { Op } from 'sequelize';
 
 export const getProductList = async (req: CustomRequest, res: Response) => {
   try {
-    const products = await Product.findAll({ order: [['points_required', 'ASC']] })
+    const products = await Product.findAll({ 
+      where: {
+        is_active: true
+      },
+      order: [['points_required', 'ASC']]
+    });
 
-    res.status(200).json({ message: 'Product list', status: res.status, data: products });
+    res.status(200).json({ message: 'Active product list', status: res.status, data: products });
   } catch (error: any) {
     console.error('Error fetching products:', error);
 

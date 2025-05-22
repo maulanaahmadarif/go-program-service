@@ -9,6 +9,7 @@ import projectRoutes from './project';
 import productRoutes from './product';
 import redeemRoutes from './redeem';
 import detailsRoutes from './details';
+import fortuneWheelRoutes from './fortune-wheel';
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use('/project', projectRoutes);
 router.use('/product', productRoutes);
 router.use('/point', redeemRoutes);
 router.use('/details', detailsRoutes);
+router.use('/fortune-wheel', fortuneWheelRoutes);
 
 export default router;
