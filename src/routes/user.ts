@@ -16,6 +16,8 @@ import {
   bulkGenerateReferralCodes,
   downloadUserList,
   getReferredUsers,
+  getReferralCodeUsers,
+  getCurrentUserReferrals,
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
 import checkDomain from "../middleware/domain";
@@ -28,6 +30,8 @@ router.post("/signup", userSignup);
 router.get("/profile", authenticate, getUserProfile);
 router.get("/list", getUserList);
 router.get("/referred", authenticate, getReferredUsers);
+router.get("/referral-codes", authenticate, getReferralCodeUsers);
+router.get("/my-referrals", authenticate, getCurrentUserReferrals);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 router.post("/update", authenticate, updateUser);

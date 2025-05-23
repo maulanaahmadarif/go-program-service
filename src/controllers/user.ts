@@ -625,6 +625,12 @@ export const updateUser = async (req: any, res: Response) => {
 			updateData.fullname = fullname;
 		}
 
+		// Add points to updateData if provided
+		if (points !== undefined) {
+			updateData.total_points = sequelize.literal(`total_points + ${points}`);
+			updateData.accomplishment_total_points = sequelize.literal(`accomplishment_total_points + ${points}`);
+		}
+
 		// Update the user's data
 		const [updatedRowsCount] = await User.update(
 			updateData,
@@ -1095,5 +1101,207 @@ export const downloadUserList = async (req: Request, res: Response) => {
 				.json({ message: "Validation error", errors: messages });
 		}
 		res.status(500).json({ message: "Something went wrong", error });
+	}
+};
+
+export const getReferralCodeUsers = async (req: Request, res: Response) => {
+	try {
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 10;
+		const offset = (page - 1) * limit;
+
+		// Find users who have their referral code used by counting users who refer to them
+		const referrers = await User.findAll({
+			attributes: [
+				'user_id',
+				'username',
+				'fullname',
+				'total_points',
+				[
+					sequelize.literal(`(
+						SELECT COUNT(*)
+						FROM users AS referred
+						WHERE referred.referred_by = "User".user_id
+						AND EXISTS (
+							SELECT 1 
+							FROM forms 
+							WHERE forms.user_id = referred.user_id 
+							AND forms.status = 'approved'
+						)
+					)`),
+					'referral_count'
+				]
+			],
+			where: {
+				referral_code: {
+					[Op.ne]: ''
+				}
+			},
+			having: sequelize.literal(`(
+				SELECT COUNT(*)
+				FROM users AS referred
+				WHERE referred.referred_by = "User".user_id
+				AND EXISTS (
+					SELECT 1 
+					FROM forms 
+					WHERE forms.user_id = referred.user_id 
+					AND forms.status = 'approved'
+				)
+			) > 0`),
+			order: [[sequelize.literal(`(
+				SELECT COUNT(*)
+				FROM users AS referred
+				WHERE referred.referred_by = "User".user_id
+				AND EXISTS (
+					SELECT 1 
+					FROM forms 
+					WHERE forms.user_id = referred.user_id 
+					AND forms.status = 'approved'
+				)
+			)`), 'DESC']],
+			group: [
+				'User.user_id',
+				'User.username',
+				'User.fullname',
+				'User.total_points'
+			],
+			limit,
+			offset,
+			subQuery: false
+		});
+
+		// Transform the response
+		const transformedUsers = referrers.map(referrer => {
+			const plainReferrer = referrer.get({ plain: true }) as any;
+			return {
+				user_id: plainReferrer.user_id,
+				username: plainReferrer.username,
+				fullname: plainReferrer.fullname || '-',
+				total_points: plainReferrer.total_points || 0,
+				total_referrals: parseInt(plainReferrer.referral_count)
+			};
+		});
+
+		// Get total count for pagination using a subquery
+		const totalCountResult = await User.findAll({
+			attributes: [
+				[sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('user_id'))), 'total']
+			],
+			where: {
+				user_id: {
+					[Op.in]: sequelize.literal(`(
+						SELECT DISTINCT u.user_id
+						FROM users u
+						WHERE u.referral_code != ''
+						AND EXISTS (
+							SELECT 1
+							FROM users referred
+							WHERE referred.referred_by = u.user_id
+							AND EXISTS (
+								SELECT 1 
+								FROM forms 
+								WHERE forms.user_id = referred.user_id 
+								AND forms.status = 'approved'
+							)
+						)
+					)`)
+				}
+			}
+		});
+
+		const totalCount = totalCountResult[0].get('total') as number;
+		const totalPages = Math.ceil(totalCount / limit);
+
+		res.status(200).json({
+			message: 'List of users with active referral codes',
+			data: transformedUsers,
+			pagination: {
+				total_items: totalCount,
+				total_pages: totalPages,
+				current_page: page,
+				items_per_page: limit
+			}
+		});
+
+	} catch (error) {
+		console.error('Error fetching referral code users:', error);
+		res.status(500).json({ 
+			message: 'An error occurred while fetching users with referral codes',
+			error 
+		});
+	}
+};
+
+export const getCurrentUserReferrals = async (req: any, res: Response) => {
+	try {
+		const userId = req.user?.userId;
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 10;
+		const offset = (page - 1) * limit;
+
+		// Get all referred users with pagination
+		const referredUsers = await User.findAll({
+			where: {
+				referred_by: userId
+			},
+			attributes: [
+				'username',
+				'fullname',
+				[
+					sequelize.literal(`(
+						SELECT COUNT(*)
+						FROM forms
+						WHERE forms.user_id = "User".user_id
+						AND forms.status = 'submitted'
+					)`),
+					'submitted_forms_count'
+				]
+			],
+			order: [['createdAt', 'DESC']],
+			limit,
+			offset,
+			group: [
+				'User.user_id',
+				'User.username',
+				'User.fullname'
+			]
+		});
+
+		// Get total count for pagination
+		const totalCount = await User.count({
+			where: {
+				referred_by: userId
+			}
+		});
+
+		const totalPages = Math.ceil(totalCount / limit);
+
+		// Transform the response
+		const transformedUsers = referredUsers.map(user => {
+			const plainUser = user.get({ plain: true }) as any;
+			return {
+				username: plainUser.username,
+				fullname: plainUser.fullname || '-',
+				submitted_forms_count: parseInt(plainUser.submitted_forms_count) || 0
+			};
+		});
+
+		res.status(200).json({
+			message: "List of referred users",
+			data: transformedUsers,
+			pagination: {
+				total_items: totalCount,
+				total_pages: totalPages,
+				current_page: page,
+				items_per_page: limit
+			}
+		});
+
+	} catch (error) {
+		console.error("Error fetching referred users:", error);
+		res.status(500).json({ 
+			message: "An error occurred while fetching referred users",
+			error 
+		});
 	}
 };

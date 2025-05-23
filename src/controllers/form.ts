@@ -833,3 +833,88 @@ export const getReport = async (req: Request, res: Response) => {
     diff_point: (total + bonusSignupPoint) - (user?.total_points || 0)
   });
 }
+
+export const getFormTypeUsers = async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const form_type_id = parseInt(req.query.form_type_id as string);
+    const offset = (page - 1) * limit;
+
+    // Validate form_type_id
+    if (!form_type_id) {
+      return res.status(400).json({
+        message: 'form_type_id is required',
+        status: 400
+      });
+    }
+
+    // First get all users with their form type submission counts using a subquery
+    const userSubmissions = await Form.findAll({
+      attributes: [
+        [sequelize.col('Form.user_id'), 'user_id'],
+        [sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'submission_count']
+      ],
+      where: {
+        form_type_id,
+        status: 'approved'
+      },
+      group: [sequelize.col('Form.user_id'), sequelize.col('user.user_id')],
+      order: [[sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'DESC']],
+      limit,
+      offset,
+      include: [{
+        model: User,
+        required: true,
+        attributes: [
+          'user_id',
+          'username',
+          'fullname',
+          'total_points'
+        ]
+      }]
+    });
+
+    // Get total count for pagination
+    const totalCount = await Form.count({
+      where: {
+        form_type_id,
+        status: 'approved'
+      },
+      distinct: true,
+      col: 'user_id'
+    });
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Transform the response
+    const transformedUsers = userSubmissions.map(submission => {
+      const plainSubmission = submission.get({ plain: true }) as any;
+      return {
+        user_id: plainSubmission.user.user_id,
+        username: plainSubmission.user.username,
+        fullname: plainSubmission.user.fullname || '-',
+        total_points: plainSubmission.user.total_points || 0,
+        form_type_submissions: parseInt(plainSubmission.submission_count)
+      };
+    });
+
+    res.status(200).json({
+      message: `List of users with form type ${form_type_id} submissions`,
+      data: transformedUsers,
+      pagination: {
+        total_items: totalCount,
+        total_pages: totalPages,
+        current_page: page,
+        items_per_page: limit
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching form type users:', error);
+    res.status(500).json({ 
+      message: 'An error occurred while fetching users with form type submissions',
+      error 
+    });
+  }
+};
