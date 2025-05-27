@@ -957,11 +957,6 @@ export const getReferredUsers = async (req: any, res: Response) => {
 					model: Form,
 					attributes: [],
 					required: true, // This ensures users have at least one form
-					where: {
-						status: {
-							[Op.or]: ['submitted']
-						}
-					}
 				}
 			],
 			order: [['createdAt', 'DESC']]
@@ -1292,7 +1287,6 @@ export const getCurrentUserReferrals = async (req: any, res: Response) => {
 						SELECT COUNT(*)
 						FROM forms
 						WHERE forms.user_id = "User".user_id
-						AND forms.status = 'submitted'
 					)`),
 					'submitted_forms_count'
 				]
