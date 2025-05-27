@@ -203,8 +203,9 @@ export const userSignup = async (req: Request, res: Response) => {
 
 		// Check if referral code exists
 		let referrerId: number | undefined = undefined;
+		let referrer: User | null = null;
 		if (referral_code) {
-			const referrer = await User.findOne({ where: { referral_code } });
+			referrer = await User.findOne({ where: { referral_code } });
 			if (referrer) {
 				referrerId = referrer.user_id;
 			}
@@ -213,79 +214,118 @@ export const userSignup = async (req: Request, res: Response) => {
 		// Generate unique referral code for new user
 		const newReferralCode = crypto.randomBytes(4).toString("hex").toUpperCase();
 
-		// Create user in the database
-		const user = await User.create({
-			username,
-			company_id: normalize_company_id,
-			email,
-			user_type,
-			password_hash: hashedPassword,
-			program_saled_id: "",
-			phone_number,
-			job_title,
-			total_points: 0,
-			accomplishment_total_points: 0,
-			fullname,
-			referral_code: newReferralCode,
-			referred_by: referrerId,
-		});
+		const transaction = await sequelize.transaction();
 
-		// Create verification token
-		await VerificationToken.create({
-			user_id: user.user_id,
-			token: verificationToken,
-			purpose: "EMAIL_CONFIRMATION",
-			expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
-		});
+		try {
+			// Create user in the database
+			const user = await User.create({
+				username,
+				company_id: normalize_company_id,
+				email,
+				user_type,
+				password_hash: hashedPassword,
+				program_saled_id: "",
+				phone_number,
+				job_title,
+				total_points: 0,
+				accomplishment_total_points: 0,
+				fullname,
+				referral_code: newReferralCode,
+				referred_by: referrerId,
+			}, { transaction });
 
-		const userProfile = {
-			id: user.user_id,
-			username: user.username,
-			email: user.email,
-			company: user.company?.name ?? null,
-			phone_number: user.phone_number ?? null,
-			job_title: user.job_title ?? null,
-			user_point: user.total_points,
-			company_point: user.company?.total_points,
-			referral_code: user.referral_code,
-		};
+			// If user signed up with a referral code, give 400 points to the referrer
+			if (referrer) {
+				const referralBonusPoints = 400;
+				
+				// Update referrer's points
+				referrer.total_points = (referrer.total_points || 0) + referralBonusPoints;
+				referrer.accomplishment_total_points = (referrer.accomplishment_total_points || 0) + referralBonusPoints;
+				await referrer.save({ transaction });
 
-		let htmlTemplate = fs.readFileSync(
-			path.join(process.cwd(), "src", "templates", "emailConfirmation.html"),
-			"utf-8",
-		);
+				// Create point transaction record for referrer
+				await PointTransaction.create({
+					user_id: referrer.user_id,
+					points: referralBonusPoints,
+					transaction_type: 'earn',
+					description: `Referral bonus for user signup: ${user.username}`
+				}, { transaction });
 
-		htmlTemplate = htmlTemplate
-			.replace("{{userName}}", user.username)
-			.replace(
-				"{{confirmationLink}}",
-				`${process.env.APP_URL}/email-confirmation?token=${verificationToken}`,
+				// Update referrer's company points
+				if (referrer.company_id) {
+					const referrerCompany = await Company.findByPk(referrer.company_id, { transaction });
+					if (referrerCompany) {
+						referrerCompany.total_points = (referrerCompany.total_points || 0) + referralBonusPoints;
+						await referrerCompany.save({ transaction });
+					}
+				}
+			}
+
+			// Create verification token
+			await VerificationToken.create({
+				user_id: user.user_id,
+				token: verificationToken,
+				purpose: "EMAIL_CONFIRMATION",
+				expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
+			}, { transaction });
+
+			await transaction.commit();
+
+			const userProfile = {
+				id: user.user_id,
+				username: user.username,
+				email: user.email,
+				company: user.company?.name ?? null,
+				phone_number: user.phone_number ?? null,
+				job_title: user.job_title ?? null,
+				user_point: user.total_points,
+				company_point: user.company?.total_points,
+				referral_code: user.referral_code,
+			};
+
+			let htmlTemplate = fs.readFileSync(
+				path.join(process.cwd(), "src", "templates", "emailConfirmation.html"),
+				"utf-8",
 			);
 
-		await sendEmail({
-			to: user.email,
-			bcc: process.env.EMAIL_BCC,
-			subject: "Email Confirmation - Lenovo Go Pro Program",
-			html: htmlTemplate,
-		});
+			htmlTemplate = htmlTemplate
+				.replace("{{userName}}", user.username)
+				.replace(
+					"{{confirmationLink}}",
+					`${process.env.APP_URL}/email-confirmation?token=${verificationToken}`,
+				);
 
-		// Return the created user
-		res.status(200).json({ user: userProfile });
+			await sendEmail({
+				to: user.email,
+				bcc: process.env.EMAIL_BCC,
+				subject: "Email Confirmation - Lenovo Go Pro Program",
+				html: htmlTemplate,
+			});
+
+			// Return the created user
+			res.status(200).json({ user: userProfile });
+		} catch (error: any) {
+			await transaction.rollback();
+			console.error("Error creating user:", error);
+
+			// Handle validation errors
+			if (error.name === "SequelizeValidationError") {
+				return res.status(400).json({
+					message: "Validation error",
+					errors: error.errors.map((err: { path: string; message: string }) => ({
+						field: err.path,
+						message: err.message,
+					})),
+				});
+			}
+
+			// Handle database connection or other errors
+			return res
+				.status(500)
+				.json({ message: "An error occurred while creating the user" });
+		}
 	} catch (error: any) {
 		console.error("Error creating user:", error);
-
-		// Handle validation errors
-		if (error.name === "SequelizeValidationError") {
-			return res.status(400).json({
-				message: "Validation error",
-				errors: error.errors.map((err: { path: string; message: string }) => ({
-					field: err.path,
-					message: err.message,
-				})),
-			});
-		}
-
-		// Handle database connection or other errors
 		return res
 			.status(500)
 			.json({ message: "An error occurred while creating the user" });
@@ -919,7 +959,7 @@ export const getReferredUsers = async (req: any, res: Response) => {
 					required: true, // This ensures users have at least one form
 					where: {
 						status: {
-							[Op.or]: ['approved']
+							[Op.or]: ['submitted']
 						}
 					}
 				}

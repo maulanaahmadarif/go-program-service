@@ -48,29 +48,6 @@ export const approveSubmission = async (req: any, res: Response) => {
         const user = await User.findByPk(updatedForm.user_id, { transaction });
         const company = await Company.findByPk(user?.company_id, { transaction });
         const formType = await FormType.findByPk(updatedForm.form_type_id, { transaction });
-
-        // Check if this is user's first approved submission
-        const previousApprovedSubmissions = await Form.count({
-          where: {
-            user_id: updatedForm.user_id,
-            status: 'approved'
-          },
-          transaction
-        });
-
-        if (previousApprovedSubmissions === 1 && user) {
-          const bonusRegistrationPoint = 400;
-          // Add bonus points for first submission
-          await PointTransaction.create({
-            user_id: user.user_id,
-            points: bonusRegistrationPoint,
-            transaction_type: 'earn',
-            description: 'First submission referral bonus'
-          }, { transaction });
-
-          additionalPoint += bonusRegistrationPoint;
-        }
-
         // Check for completion bonus based on user type
         const currentDate = dayjs();
         const targetDate = dayjs('2025-06-20');
@@ -162,7 +139,23 @@ export const approveSubmission = async (req: any, res: Response) => {
           await company.save({ transaction });
         }
 
+        // Get project information for email
+        const project = await Project.findByPk(updatedForm.project_id, { transaction });
+
         await transaction.commit();
+
+        // Send approval email after successful transaction
+        if (user && project && formType) {
+          let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
+
+          htmlTemplate = htmlTemplate
+            .replace('{{username}}', user.username)
+            .replace('{{project}}', project.name)
+            .replace('{{milestone}}', formType.form_name);
+
+          await sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate });
+        }
+
         res.status(200).json({ message: 'Form approved successfully', status: res.status });
         return;
       }

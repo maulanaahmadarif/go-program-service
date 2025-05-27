@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Form Rejection Notification</title>
+  <title>Milestone Submission Approved</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -33,7 +33,21 @@
     }
     .highlight {
       font-weight: bold;
-      color: #ff4d4f;
+      color: #65a30d;
+    }
+    .project-info {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 15px 0;
+      border-left: 4px solid #65a30d;
+    }
+    .aura-highlight {
+      background-color: #fff3cd;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 15px 0;
+      border-left: 4px solid #ffc107;
     }
     .footer {
       text-align: center;
@@ -54,22 +68,35 @@
 
   <div class="container">
     <div class="header">
-      <h2>Form Submission Approved</h2>
+      <h2>Milestone Submission Approved</h2>
     </div>
 
     <div class="content">
-      <p>Hi <span class="highlight">{{username}}</span>,</p>
-      <p>Congratulations! Your submission is approved by the Lenovo Go Pro Program team.</p>
+      <p>Hi, <span class="highlight">{{username}}</span>!</p>
+      
+      <p><strong>Congratulations!</strong><br/>
+      Your recent milestone submission for Lenovo Go Pro has been approved!</p>
 
-      <p>Thank you for your participation. <br/>Let's work on another project, earn points as much as possible, and get the rewards in the Lenovo Go Pro Program!</p>
+      <div class="project-info">
+        <p><strong>Project Name:</strong> {{project}}<br/>
+        <strong>Milestone Approved:</strong> {{milestone}}</p>
+      </div>
 
-      <p>
-        Good luck and cheers, Lenovo Go Pro Program
-      </p>
+      <p>Your points have been added to your profile! Quickly track your progress in the Leaderboard.</p>
+
+      <div class="aura-highlight">
+        <p><strong>Don't forget!</strong><br/>
+        Submitting Lenovo Aura Edition sales will give you up to 10x points!</p>
+      </div>
+
+      <p>Let's keep the momentum going and aim for the top in Lenovo Go Pro!</p>
+
+      <p>Good luck,<br/>
+      <strong>Lenovo Go Pro Team</strong></p>
     </div>
 
     <div class="footer">
-      <p>Best regards, <br> Lenovo Go Pro Program</p>
+      <p>Best regards, <br> Lenovo Go Pro Team</p>
     </div>
   </div>
 
