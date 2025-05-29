@@ -51,6 +51,7 @@ export const getCompanyList = async (req: Request, res: Response) => {
           include: [
             // Add a virtual field "userCount" to count the number of users in each company
             [Sequelize.fn('SUM', Sequelize.col('users.accomplishment_total_points')), 'total_company_points'],
+            [Sequelize.fn('SUM', Sequelize.col('users.lifetime_total_points')), 'lifetime_total_points'],
             [Sequelize.fn('COUNT', Sequelize.col('users.user_id')), 'total_users']
           ]
         },
@@ -133,6 +134,7 @@ export const getCompanyDetail = async (req: Request, res: Response) => {
         include: [
           // Add a virtual field "userCount" to count the number of users in each company
           [Sequelize.fn('SUM', Sequelize.col('users.accomplishment_total_points')), 'total_company_points'],
+          [Sequelize.fn('SUM', Sequelize.col('users.lifetime_total_points')), 'lifetime_total_points'],
           [Sequelize.fn('COUNT', Sequelize.col('users.user_id')), 'total_users'],
         ]
       },
@@ -182,11 +184,8 @@ export const mergeCompany = async (req: Request, res: Response) => {
       return;
     }
 
-    // Combine points
-    const combinedPoints = (sourceCompany.total_points || 0) + (destinationCompany.total_points || 0);
-
     // Update destination company points
-    await destinationCompany.update({ total_points: combinedPoints }, { transaction });
+    await destinationCompany.update({}, { transaction });
 
     await User.update(
       { company_id: destinationId },

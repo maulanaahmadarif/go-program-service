@@ -40,6 +40,7 @@ export interface UserAttributes {
   level?: 'CUSTOMER' | 'INTERNAL';
   total_points?: number;
   accomplishment_total_points?: number;
+  lifetime_total_points?: number;
   is_active?: boolean;
   referral_code?: string;
   referred_by?: number;
@@ -104,6 +105,10 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Default(0)
   @Column(DataType.INTEGER) // Specify data type
   public total_points?: number;
+
+  @Default(0)
+  @Column(DataType.INTEGER) // Specify data type
+  public lifetime_total_points?: number;
 
   @Default(false)
   @Column(DataType.BOOLEAN)

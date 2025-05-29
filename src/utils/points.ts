@@ -79,4 +79,33 @@ export const calculateBonusPoints = (formTypeId: number, product_quantity: numbe
   }
 
   return bonus_points;
+};
+
+/**
+ * Calculate referral milestone bonus points based on the number of referred users with form submissions
+ * @param referralCount - Current count of referred users who have submitted forms
+ * @returns Object containing bonus points and milestone achieved
+ */
+export const calculateReferralMilestoneBonus = (referralCount: number): { bonusPoints: number; milestone: number | null } => {
+  // Define milestone thresholds and their corresponding bonus points
+  const milestones = [
+    { threshold: 7, bonus: 1500 },
+    { threshold: 15, bonus: 3500 },
+    { threshold: 20, bonus: 5000 },
+  ];
+
+  // Find the milestone that was just reached
+  for (const milestone of milestones) {
+    if (referralCount === milestone.threshold) {
+      return {
+        bonusPoints: milestone.bonus,
+        milestone: milestone.threshold
+      };
+    }
+  }
+
+  return {
+    bonusPoints: 0,
+    milestone: null
+  };
 }; 

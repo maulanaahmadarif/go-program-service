@@ -33,7 +33,6 @@ export const getProgramDetail = async (req: Request, res: Response) => {
     });
     const totalUser = await User.count({ where: { level: 'CUSTOMER', is_active: true } })
     const totalAccomplishmentPoint = await User.sum('accomplishment_total_points', { where: { level: 'CUSTOMER', is_active: true } })
-    // const totalCompanyPoint = await Company.sum('total_points', { where: { status: 'active' } })
     const totalFormSubmission = await Form.count({
       include: [
         {
@@ -56,7 +55,6 @@ export const getProgramDetail = async (req: Request, res: Response) => {
         total_company: totalCompany,
         total_user: totalUser,
         total_accomplishment_point: totalAccomplishmentPoint,
-        // total_company_point: totalCompanyPoint,
         total_form_submission : totalFormSubmission,
       }
     });
@@ -81,7 +79,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
     // Fetch user and related company information
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
-      include: [{ association: 'company', attributes: ['name', 'total_points'] }],
+      include: [{ association: 'company', attributes: ['name'] }],
     });
 
     // Check if user exists

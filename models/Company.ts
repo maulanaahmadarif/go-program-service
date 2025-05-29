@@ -8,7 +8,6 @@ export interface CompanyAttributes {
   name: string;
   address?: string;
   industry: string;
-  total_points?: number;
   status?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -35,10 +34,6 @@ export class Company extends Model<CompanyAttributes, CompanyCreationAttributes>
   @AllowNull(true)
   @Column(DataType.STRING(255)) // Specify data type
   public industry?: string;
-
-  @Default(0)
-  @Column(DataType.INTEGER) // Specify data type
-  public total_points?: number;
 
   @Default('active')
   @Column(DataType.STRING) // Specify data type

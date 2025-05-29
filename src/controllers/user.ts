@@ -196,7 +196,6 @@ export const userSignup = async (req: Request, res: Response) => {
 			const customCompany = await Company.create({
 				name: custom_company,
 				industry: "Custom Company",
-				total_points: 0,
 			});
 			normalize_company_id = customCompany.company_id;
 		}
@@ -241,6 +240,7 @@ export const userSignup = async (req: Request, res: Response) => {
 				// Update referrer's points
 				referrer.total_points = (referrer.total_points || 0) + referralBonusPoints;
 				referrer.accomplishment_total_points = (referrer.accomplishment_total_points || 0) + referralBonusPoints;
+				referrer.lifetime_total_points = (referrer.lifetime_total_points || 0) + referralBonusPoints;
 				await referrer.save({ transaction });
 
 				// Create point transaction record for referrer
@@ -250,15 +250,6 @@ export const userSignup = async (req: Request, res: Response) => {
 					transaction_type: 'earn',
 					description: `Referral bonus for user signup: ${user.username}`
 				}, { transaction });
-
-				// Update referrer's company points
-				if (referrer.company_id) {
-					const referrerCompany = await Company.findByPk(referrer.company_id, { transaction });
-					if (referrerCompany) {
-						referrerCompany.total_points = (referrerCompany.total_points || 0) + referralBonusPoints;
-						await referrerCompany.save({ transaction });
-					}
-				}
 			}
 
 			// Create verification token
@@ -279,7 +270,6 @@ export const userSignup = async (req: Request, res: Response) => {
 				phone_number: user.phone_number ?? null,
 				job_title: user.job_title ?? null,
 				user_point: user.total_points,
-				company_point: user.company?.total_points,
 				referral_code: user.referral_code,
 			};
 
@@ -342,7 +332,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 			include: [
 				{
 					model: Company,
-					attributes: ["name", "total_points"],
+					attributes: ["name"],
 				},
 				{
 					model: User,
@@ -377,7 +367,6 @@ export const getUserProfile = async (req: any, res: Response) => {
 			phone_number: user.phone_number ?? null,
 			job_title: user.job_title ?? null,
 			user_point: user.total_points,
-			company_point: total_company_points,
 			accomplishment_total_points: user.accomplishment_total_points,
 			fullname: user.fullname,
 			user_type: user.user_type,
@@ -587,13 +576,6 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
 		// Delete the used verification token
 		await verificationToken.destroy();
 
-		// Update company points
-		const company = await Company.findByPk(user.company_id);
-		if (company) {
-			company.total_points = company.total_points || 0;
-			await company.save();
-		}
-
 		let htmlTemplate = fs.readFileSync(
 			path.join(process.cwd(), "src", "templates", "welcomeEmail.html"),
 			"utf-8",
@@ -669,6 +651,7 @@ export const updateUser = async (req: any, res: Response) => {
 		if (points !== undefined) {
 			updateData.total_points = sequelize.literal(`total_points + ${points}`);
 			updateData.accomplishment_total_points = sequelize.literal(`accomplishment_total_points + ${points}`);
+			updateData.lifetime_total_points = sequelize.literal(`lifetime_total_points + ${points}`);
 		}
 
 		// Update the user's data
@@ -709,25 +692,15 @@ export const updateUser = async (req: any, res: Response) => {
 			// Update user's total points and accomplishment points
 			const currentPoints = user.total_points || 0;
 			const currentAccomplishmentPoints = user.accomplishment_total_points || 0;
+			const currentLifetimePoints = user.lifetime_total_points || 0;
 			await user.update(
 				{ 
 					total_points: currentPoints + points,
-					accomplishment_total_points: currentAccomplishmentPoints + points
+					accomplishment_total_points: currentAccomplishmentPoints + points,
+					lifetime_total_points: currentLifetimePoints + points
 				},
 				{ transaction }
 			);
-
-			// Update company total points
-			if (user.company_id) {
-				const company = await Company.findByPk(user.company_id, { transaction });
-				if (company) {
-					const currentCompanyPoints = company.total_points || 0;
-					await company.update(
-						{ total_points: currentCompanyPoints + points },
-						{ transaction }
-					);
-				}
-			}
 		}
 
 		await transaction.commit();
@@ -746,14 +719,6 @@ export const deleteUser = async (req: Request, res: Response) => {
 		const user = await User.findByPk(userId, { transaction });
 
 		if (user) {
-			// Update company points before deleting user
-			const company = await Company.findByPk(user.company_id, { transaction });
-			if (company) {
-				company.total_points =
-					(company.total_points || 0) - (user.accomplishment_total_points || 0);
-				await company.save({ transaction });
-			}
-
 			// Create point transaction record for removed points
 			if ((user.total_points ?? 0) > 0) {
 				await PointTransaction.create(

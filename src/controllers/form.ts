@@ -15,7 +15,7 @@ import { UserAction } from '../../models/UserAction';
 import { Project } from '../../models/Project';
 import { sendEmail } from '../services/mail';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
-import { calculateBonusPoints } from '../utils/points';
+import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/points';
 import { PointTransaction } from '../../models/PointTransaction';
 
 export const approveSubmission = async (req: any, res: Response) => {
@@ -131,11 +131,11 @@ export const approveSubmission = async (req: any, res: Response) => {
 
           user.total_points = (user.total_points || 0) + totalPoints;
           user.accomplishment_total_points = (user.accomplishment_total_points || 0) + totalPoints;
+          user.lifetime_total_points = (user.lifetime_total_points || 0) + totalPoints;
           await user.save({ transaction });
         }
     
         if (company && formType) {
-          company.total_points = (company.total_points || 0) + formType.point_reward + additionalPoint;
           await company.save({ transaction });
         }
 
@@ -270,7 +270,7 @@ export const formSubmission = async (req: any, res: Response) => {
       form_data,
       project_id,
       status: 'submitted'
-    })
+    }, { transaction })
 
     const formsCount = await Form.count(
       {
@@ -305,6 +305,45 @@ export const formSubmission = async (req: any, res: Response) => {
         if (formsCount === 4) {
           isProjectFormCompleted = true;
         }
+      }
+    }
+
+    // Check for referral milestone bonus for the referrer
+    if (user?.referrer) {
+      // Count referred users who have submitted forms for the referrer
+      const referredUsersWithForms = await User.count({
+        where: {
+          referred_by: user.referrer.user_id
+        },
+        include: [{
+          model: Form,
+          required: true // This ensures users have at least one form
+        }],
+        distinct: true,
+        transaction
+      });
+
+      const referralMilestone = calculateReferralMilestoneBonus(referredUsersWithForms);
+      
+      if (referralMilestone.bonusPoints > 0 && referralMilestone.milestone) {
+        // Award milestone bonus to the referrer
+        const referrer = user.referrer;
+        
+        // Create point transaction record for referral milestone bonus
+        await PointTransaction.create({
+          user_id: referrer.user_id,
+          points: referralMilestone.bonusPoints,
+          transaction_type: 'earn',
+          description: `Referral milestone bonus for reaching ${referralMilestone.milestone} referred users with form submissions`
+        }, { transaction });
+
+        // Update referrer's points
+        referrer.total_points = (referrer.total_points || 0) + referralMilestone.bonusPoints;
+        referrer.accomplishment_total_points = (referrer.accomplishment_total_points || 0) + referralMilestone.bonusPoints;
+        referrer.lifetime_total_points = (referrer.lifetime_total_points || 0) + referralMilestone.bonusPoints;
+        await referrer.save({ transaction });
+
+        console.log(`Referral milestone bonus awarded: ${referralMilestone.bonusPoints} points to user ${referrer.username} for reaching ${referralMilestone.milestone} referred users with form submissions`);
       }
     }
 
