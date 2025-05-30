@@ -89,9 +89,9 @@ export const calculateBonusPoints = (formTypeId: number, product_quantity: numbe
 export const calculateReferralMilestoneBonus = (referralCount: number): { bonusPoints: number; milestone: number | null } => {
   // Define milestone thresholds and their corresponding bonus points
   const milestones = [
-    { threshold: 7, bonus: 1500 },
-    { threshold: 15, bonus: 3500 },
-    { threshold: 20, bonus: 5000 },
+    { threshold: 8, bonus: 1500 },
+    { threshold: 16, bonus: 3500 },
+    { threshold: 21, bonus: 5000 },
   ];
 
   // Find the milestone that was just reached

@@ -233,22 +233,22 @@ export const userSignup = async (req: Request, res: Response) => {
 				referred_by: referrerId,
 			}, { transaction });
 
-			// If user signed up with a referral code, give 400 points to the referrer
+			// If user signed up with a referral code, give 400 points to the new user
 			if (referrer) {
 				const referralBonusPoints = 400;
 				
-				// Update referrer's points
-				referrer.total_points = (referrer.total_points || 0) + referralBonusPoints;
-				referrer.accomplishment_total_points = (referrer.accomplishment_total_points || 0) + referralBonusPoints;
-				referrer.lifetime_total_points = (referrer.lifetime_total_points || 0) + referralBonusPoints;
-				await referrer.save({ transaction });
+				// Update new user's points
+				user.total_points = (user.total_points || 0) + referralBonusPoints;
+				user.accomplishment_total_points = (user.accomplishment_total_points || 0) + referralBonusPoints;
+				user.lifetime_total_points = (user.lifetime_total_points || 0) + referralBonusPoints;
+				await user.save({ transaction });
 
-				// Create point transaction record for referrer
+				// Create point transaction record for new user
 				await PointTransaction.create({
-					user_id: referrer.user_id,
+					user_id: user.user_id,
 					points: referralBonusPoints,
 					transaction_type: 'earn',
-					description: `Referral bonus for user signup: ${user.username}`
+					description: `Referral signup bonus for using referral code: ${referrer.referral_code}`
 				}, { transaction });
 			}
 
@@ -368,6 +368,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 			job_title: user.job_title ?? null,
 			user_point: user.total_points,
 			accomplishment_total_points: user.accomplishment_total_points,
+			company_point: total_company_points || 0,
 			fullname: user.fullname,
 			user_type: user.user_type,
 			// For T2 users, show the referral code they used during signup
@@ -1126,7 +1127,6 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 							SELECT 1 
 							FROM forms 
 							WHERE forms.user_id = referred.user_id 
-							AND forms.status = 'approved'
 						)
 					)`),
 					'referral_count'
@@ -1145,7 +1145,6 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 					SELECT 1 
 					FROM forms 
 					WHERE forms.user_id = referred.user_id 
-					AND forms.status = 'approved'
 				)
 			) > 0`),
 			order: [[sequelize.literal(`(
@@ -1156,7 +1155,6 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 					SELECT 1 
 					FROM forms 
 					WHERE forms.user_id = referred.user_id 
-					AND forms.status = 'approved'
 				)
 			)`), 'DESC']],
 			group: [
@@ -1201,7 +1199,6 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 								SELECT 1 
 								FROM forms 
 								WHERE forms.user_id = referred.user_id 
-								AND forms.status = 'approved'
 							)
 						)
 					)`)

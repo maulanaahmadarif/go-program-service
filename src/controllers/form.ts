@@ -71,40 +71,6 @@ export const approveSubmission = async (req: any, res: Response) => {
           }
         }
 
-        // Check for form type 4 bonus points
-        if (updatedForm.form_type_id === 4) {
-          const type4ApprovedCount = await Form.count({
-            where: {
-              user_id: updatedForm.user_id,
-              form_type_id: 4,
-              status: 'approved'
-            },
-            transaction
-          });
-
-          let bonusPoints = 0;
-          if (type4ApprovedCount === 30) {
-            bonusPoints = 6000;
-          } else if (type4ApprovedCount === 40) {
-            bonusPoints = 8000;
-          } else if (type4ApprovedCount === 50) {
-            bonusPoints = 10000;
-          }
-
-          if (bonusPoints > 0 && user) {
-            // Create point transaction record for form type 4 milestone bonus
-            await PointTransaction.create({
-              user_id: user.user_id,
-              points: bonusPoints,
-              transaction_type: 'earn',
-              form_id: Number(form_id),
-              description: `Bonus points for achieving ${type4ApprovedCount} approved form type 4 submissions`
-            }, { transaction });
-
-            additionalPoint += bonusPoints;
-          }
-        }
-
         if (user && formType) {
           const basePoints = formType.point_reward;
           const totalPoints = basePoints + additionalPoint;
@@ -304,6 +270,51 @@ export const formSubmission = async (req: any, res: Response) => {
       } else if (user?.user_type === 'T1') {
         if (formsCount === 4) {
           isProjectFormCompleted = true;
+        }
+      }
+    }
+
+    // Check for form type 4 bonus points
+    if (form_type_id === 4 && user) {
+      // Check if submission is before June 20, 2025 end of day
+      const cutoffDate = dayjs('2025-06-20T23:59:59');
+      
+      if (currentDate.isBefore(cutoffDate)) {
+        const type4SubmittedCount = await Form.count({
+          where: {
+            user_id: userId,
+            form_type_id: 4,
+            createdAt: {
+              [Op.lt]: new Date('2025-06-20T23:59:59.999Z')
+            }
+          },
+          transaction
+        });
+
+        let bonusPoints = 0;
+        if (type4SubmittedCount === 31) { // Passed 30 checkpoint
+          bonusPoints = 6000;
+        } else if (type4SubmittedCount === 41) { // Passed 40 checkpoint
+          bonusPoints = 8000;
+        } else if (type4SubmittedCount === 51) { // Passed 50 checkpoint
+          bonusPoints = 10000;
+        }
+
+        if (bonusPoints > 0) {
+          // Create point transaction record for form type 4 milestone bonus
+          await PointTransaction.create({
+            user_id: user.user_id,
+            points: bonusPoints,
+            transaction_type: 'earn',
+            form_id: submission.form_id,
+            description: `Bonus points for passing ${type4SubmittedCount - 1} form type 4 submissions milestone`
+          }, { transaction });
+
+          // Update user's points
+          user.total_points = (user.total_points || 0) + bonusPoints;
+          user.accomplishment_total_points = (user.accomplishment_total_points || 0) + bonusPoints;
+          user.lifetime_total_points = (user.lifetime_total_points || 0) + bonusPoints;
+          await user.save({ transaction });
         }
       }
     }
@@ -590,11 +601,14 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
 
     const whereClause: any = {
       user_id: userId,
-      status: 'approved'
     };
 
     if (form_type_id) {
       whereClause.form_type_id = form_type_id;
+      // Add date condition: createdAt must be before June 20, 2025 end of day
+      whereClause.createdAt = {
+        [Op.lt]: new Date('2025-06-20T23:59:59.999Z')
+      };
     }
 
     const forms = await Form.findAll({
@@ -889,7 +903,6 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
       ],
       where: {
         form_type_id,
-        status: 'approved'
       },
       group: [sequelize.col('Form.user_id'), sequelize.col('user.user_id')],
       order: [[sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'DESC']],
@@ -911,7 +924,6 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
     const totalCount = await Form.count({
       where: {
         form_type_id,
-        status: 'approved'
       },
       distinct: true,
       col: 'user_id'
