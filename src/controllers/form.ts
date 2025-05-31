@@ -276,16 +276,18 @@ export const formSubmission = async (req: any, res: Response) => {
 
     // Check for form type 4 bonus points
     if (form_type_id === 4 && user) {
-      // Check if submission is before June 20, 2025 end of day
+      // Check if submission is within the date range: May 1, 2025 to June 20, 2025 end of day
+      const startDate = dayjs('2025-05-01T00:00:00');
       const cutoffDate = dayjs('2025-06-20T23:59:59');
       
-      if (currentDate.isBefore(cutoffDate)) {
+      if (currentDate.isAfter(startDate) && currentDate.isBefore(cutoffDate)) {
         const type4SubmittedCount = await Form.count({
           where: {
             user_id: userId,
             form_type_id: 4,
             createdAt: {
-              [Op.lt]: new Date('2025-06-20T23:59:59.999Z')
+              [Op.gte]: new Date('2025-05-01T00:00:00.000Z'),
+              [Op.lte]: new Date('2025-06-20T23:59:59.999Z')
             }
           },
           transaction
@@ -605,9 +607,10 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
 
     if (form_type_id) {
       whereClause.form_type_id = form_type_id;
-      // Add date condition: createdAt must be before June 20, 2025 end of day
+      // Add date condition: submissions between May 1, 2025 and June 20, 2025 end of day
       whereClause.createdAt = {
-        [Op.lt]: new Date('2025-06-20T23:59:59.999Z')
+        [Op.gte]: new Date('2025-05-01T00:00:00.000Z'),
+        [Op.lte]: new Date('2025-06-20T23:59:59.999Z')
       };
     }
 
@@ -895,6 +898,10 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
       });
     }
 
+    // Date filter: from May 1, 2025 to June 20, 2025 end of day
+    const startDate = new Date('2025-05-01T00:00:00.000Z');
+    const endDate = new Date('2025-06-20T23:59:59.999Z'); // June 20, 2025 end of day
+
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
       attributes: [
@@ -903,6 +910,10 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
       ],
       where: {
         form_type_id,
+        createdAt: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate
+        }
       },
       group: [sequelize.col('Form.user_id'), sequelize.col('user.user_id')],
       order: [[sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'DESC']],
@@ -924,6 +935,10 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
     const totalCount = await Form.count({
       where: {
         form_type_id,
+        createdAt: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate
+        }
       },
       distinct: true,
       col: 'user_id'

@@ -125,11 +125,10 @@ export const getCompanyList = async (req: Request, res: Response) => {
 export const getCompanyDetail = async (req: Request, res: Response) => {
   try {
     const { company_id } = req.params
-    const sortField: string = (req.query.sortBy as string) || 'total_points';
     const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
 
     const companies = await Company.findByPk(company_id, {
-      order: [[sortField, orderDirection]],
+      order: [[Sequelize.literal('total_company_points'), orderDirection]],
       attributes: {
         include: [
           // Add a virtual field "userCount" to count the number of users in each company
