@@ -1104,6 +1104,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
+						AND referred.created_at >= '2025-05-28T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1122,6 +1123,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
+				AND referred.created_at >= '2025-05-28T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1132,6 +1134,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
+				AND referred.created_at >= '2025-05-28T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1176,6 +1179,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
+							AND referred.created_at >= '2025-05-28T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 
