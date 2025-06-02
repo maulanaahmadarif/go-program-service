@@ -673,12 +673,6 @@ export const updateUser = async (req: any, res: Response) => {
 
 		// Handle points update if provided
 		if (points !== undefined) {
-			const user = await User.findByPk(userId, { transaction });
-			if (!user) {
-				await transaction.rollback();
-				return res.status(404).json({ message: "User not found" });
-			}
-
 			// Create point transaction record
 			await PointTransaction.create(
 				{
@@ -686,19 +680,6 @@ export const updateUser = async (req: any, res: Response) => {
 					points: points,
 					transaction_type: "adjust",
 					description: "Points adjusted via user update",
-				},
-				{ transaction }
-			);
-
-			// Update user's total points and accomplishment points
-			const currentPoints = user.total_points || 0;
-			const currentAccomplishmentPoints = user.accomplishment_total_points || 0;
-			const currentLifetimePoints = user.lifetime_total_points || 0;
-			await user.update(
-				{ 
-					total_points: currentPoints + points,
-					accomplishment_total_points: currentAccomplishmentPoints + points,
-					lifetime_total_points: currentLifetimePoints + points
 				},
 				{ transaction }
 			);

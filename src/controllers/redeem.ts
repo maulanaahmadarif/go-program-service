@@ -200,7 +200,11 @@ export const rejectRedeem = async (req: Request, res: Response) => {
       description: `Returned ${redeemDetail.points_spent} points from rejected redemption of ${productDetail.name}`
     }, { transaction });
 
+    // Update all point fields consistently
     user.total_points = (user.total_points || 0) + redeemDetail.points_spent;
+    user.accomplishment_total_points = (user.accomplishment_total_points || 0) + redeemDetail.points_spent;
+    user.lifetime_total_points = (user.lifetime_total_points || 0) + redeemDetail.points_spent;
+    
     redeemDetail.status = 'rejected'
     productDetail.stock_quantity = (productDetail.stock_quantity || 0) + 1;
 
