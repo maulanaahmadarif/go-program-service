@@ -157,13 +157,13 @@ export const userSignup = async (req: Request, res: Response) => {
 			referral_code,
 		} = req.body;
 
-		// Check if email is from fokustarget.com domain
-		if (!email.toLowerCase().endsWith('@fokustarget.com')) {
-			return res.status(401).json({ 
-				message: 'Operation not allowed',
-				status: res.status
-			});
-		}
+		// // Check if email is from fokustarget.com domain
+		// if (!email.toLowerCase().endsWith('@fokustarget.com')) {
+		// 	return res.status(401).json({ 
+		// 		message: 'Operation not allowed',
+		// 		status: res.status
+		// 	});
+		// }
 
 		// Check if email already exists
 		const existingEmail = await User.findOne({ where: { email } });
