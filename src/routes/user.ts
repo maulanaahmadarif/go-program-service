@@ -25,7 +25,7 @@ import checkDomain from "../middleware/domain";
 const router = express.Router();
 
 router.post("/login", userLogin);
-router.post("/signup", userSignup);
+router.post("/signup", checkDomain, userSignup);
 // router.post('/add-internal-user', addInternalUser)
 router.get("/profile", authenticate, getUserProfile);
 router.get("/list", getUserList);
