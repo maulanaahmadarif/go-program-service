@@ -24,6 +24,7 @@ import { PointTransaction } from './PointTransaction';  // Adjust paths based on
 import { Project } from './Project'
 import { VerificationToken } from './VerificationToken';
 import { FortuneWheelSpin } from './FortuneWheelSpin';
+import { UserMysteryBox } from './UserMysteryBox';
 
 
 export interface UserAttributes {
@@ -152,6 +153,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
 
   @HasMany(() => FortuneWheelSpin)
   fortune_wheel_spins!: FortuneWheelSpin[];
+
+  @HasMany(() => UserMysteryBox)
+  user_mystery_boxes!: UserMysteryBox[];
 
   @BelongsTo(() => Company)
   company?: Company;

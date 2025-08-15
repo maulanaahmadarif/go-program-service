@@ -17,6 +17,7 @@ import { Optional } from "sequelize";
 
 import { Redemption } from './Redemption';  // Adjust paths based on your project structure
 import { FortuneWheelSpin } from './FortuneWheelSpin';
+import { UserMysteryBox } from './UserMysteryBox';
 
 export interface ProductTypeAttributes {
   product_id?: number;
@@ -92,6 +93,9 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
 
   @HasMany(() => FortuneWheelSpin)
   fortune_wheel_spins!: FortuneWheelSpin[];
+
+  @HasMany(() => UserMysteryBox)
+  user_mystery_boxes!: UserMysteryBox[];
 
   // static associate(models: any) {
   //   Product.hasMany(models.Redemption, { foreignKey: 'product_id' });

@@ -355,6 +355,14 @@ export const getUserProfile = async (req: any, res: Response) => {
 			},
 		});
 
+		// Count total forms submitted by the user
+		const total_form_approved = await Form.count({
+			where: {
+				user_id: user.user_id,
+				status: 'approved'
+			}
+		});
+
 		const plainUser = user.get({ plain: true }) as any;
 
 		// Build the user profile response
@@ -371,6 +379,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 			company_point: total_company_points || 0,
 			fullname: user.fullname,
 			user_type: user.user_type,
+			total_form_approved: total_form_approved,
 			// For T2 users, show the referral code they used during signup
 			referral_code:
 				plainUser.user_type === "T2"
@@ -1234,6 +1243,7 @@ export const getCurrentUserReferrals = async (req: any, res: Response) => {
 						SELECT COUNT(*)
 						FROM forms
 						WHERE forms.user_id = "User".user_id
+						AND forms.status != 'rejected'
 					)`),
 					'submitted_forms_count'
 				]

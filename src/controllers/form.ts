@@ -9,6 +9,7 @@ import { FormType } from '../../models/FormType';
 import { Form } from '../../models/Form';
 import { User } from '../../models/User';
 import { Company } from '../../models/Company';
+import { Product } from '../../models/Product';
 import { sequelize } from '../db';
 import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
@@ -17,6 +18,7 @@ import { sendEmail } from '../services/mail';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/points';
 import { PointTransaction } from '../../models/PointTransaction';
+import { UserMysteryBox } from '../../models/UserMysteryBox';
 
 export const approveSubmission = async (req: any, res: Response) => {
   const form_id = req.params.form_id;
@@ -50,7 +52,7 @@ export const approveSubmission = async (req: any, res: Response) => {
         const formType = await FormType.findByPk(updatedForm.form_type_id, { transaction });
         // Check for completion bonus based on user type
         const currentDate = dayjs();
-        const targetDate = dayjs('2025-06-20');
+        const targetDate = dayjs('2025-09-20');
         
         if (currentDate.isBefore(targetDate)) {
           const additionalPointCompletionPoint = 200;
@@ -64,7 +66,7 @@ export const approveSubmission = async (req: any, res: Response) => {
             transaction
           });
 
-          if (user?.user_type === 'T2' && approvedSubmissionsCount === 5) {
+          if (user?.user_type === 'T2' && approvedSubmissionsCount === 4) {
             additionalPoint += additionalPointCompletionPoint; // Add bonus points for T2 user completing 6 submissions
           } else if (user?.user_type === 'T1' && approvedSubmissionsCount === 4) {
             additionalPoint += additionalPointCompletionPoint; // Add bonus points for T1 user completing 4 submissions
@@ -99,6 +101,69 @@ export const approveSubmission = async (req: any, res: Response) => {
           user.accomplishment_total_points = (user.accomplishment_total_points || 0) + totalPoints;
           user.lifetime_total_points = (user.lifetime_total_points || 0) + totalPoints;
           await user.save({ transaction });
+
+          // Check for milestone achievements and create mystery boxes
+          const totalApprovedForms = await Form.count({
+            where: {
+              user_id: user.user_id,
+              status: 'approved'
+            },
+            transaction
+          });
+
+          // Define milestone thresholds
+          const milestones = [5, 10, 50];
+          
+          for (const milestone of milestones) {
+            if (totalApprovedForms >= milestone) {
+              // Check if mystery box already exists for this milestone
+              const existingMysteryBox = await UserMysteryBox.findOne({
+                where: {
+                  user_id: user.user_id,
+                  milestone_reached: milestone,
+                },
+                transaction
+              });
+
+              if (!existingMysteryBox) {
+                // Determine product based on milestone and probability
+                let selectedProductId: number;
+                
+                if (milestone === 5) {
+                  // 5 Milestone: 60% +500 points, 40% sbux evoucher
+                  const random = Math.random();
+                  selectedProductId = random < 0.6 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
+                } else if (milestone === 10) {
+                  // 10 Milestone: 30% +500 points, 70% sbux evoucher
+                  const random = Math.random();
+                  selectedProductId = random < 0.3 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
+                } else if (milestone === 50) {
+                  // 50 Milestone: 80% sbux points, 20% airpods pro
+                  const random = Math.random();
+                  selectedProductId = random < 0.8 ? 7 : 9; // 7 = sbux evoucher, 9 = airpods pro
+                } else {
+                  // Fallback to +500 points if milestone doesn't match
+                  selectedProductId = 4;
+                }
+
+                // Check if selected product has stock available, fallback to +500 points if out of stock
+                if (selectedProductId !== 4) { // Don't check stock for +500 points (ID 4)
+                  const selectedProduct = await Product.findByPk(selectedProductId, { transaction });
+                  if (!selectedProduct || selectedProduct.stock_quantity <= 0) {
+                    selectedProductId = 4; // Fallback to +500 points
+                  }
+                }
+
+                // Create new mystery box for this milestone with selected product
+                await UserMysteryBox.create({
+                  user_id: user.user_id,
+                  product_id: selectedProductId,
+                  milestone_reached: milestone,
+                  status: 'available'
+                }, { transaction });
+              }
+            }
+          }
         }
     
         if (company && formType) {
@@ -278,7 +343,7 @@ export const formSubmission = async (req: any, res: Response) => {
     if (form_type_id === 4 && user) {
       // Check if submission is within the date range: May 1, 2025 to June 20, 2025 end of day
       const startDate = dayjs('2025-05-01T00:00:00');
-      const cutoffDate = dayjs('2025-06-20T23:59:59');
+      const cutoffDate = dayjs('2025-09-20T23:59:59');
       
       if (currentDate.isAfter(startDate) && currentDate.isBefore(cutoffDate)) {
         const type4SubmittedCount = await Form.count({
@@ -287,7 +352,7 @@ export const formSubmission = async (req: any, res: Response) => {
             form_type_id: 4,
             createdAt: {
               [Op.gte]: new Date('2025-05-01T00:00:00.000Z'),
-              [Op.lte]: new Date('2025-06-20T23:59:59.999Z')
+              [Op.lte]: new Date('2025-09-20T23:59:59.999Z')
             }
           },
           transaction
@@ -603,6 +668,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
 
     const whereClause: any = {
       user_id: userId,
+      status: 'approved'
     };
 
     if (form_type_id) {
@@ -610,12 +676,12 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       // Add date condition: submissions between May 1, 2025 and June 20, 2025 end of day
       whereClause.createdAt = {
         [Op.gte]: new Date('2025-05-01T00:00:00.000Z'),
-        [Op.lte]: new Date('2025-06-20T23:59:59.999Z')
+        [Op.lte]: new Date('2025-09-20T23:59:59.999Z')
       };
     }
 
     const forms = await Form.findAll({
-      attributes: ['form_id', 'createdAt'],
+      attributes: ['form_id', 'form_data', 'createdAt'],
       where: whereClause,
       include: [
         {
@@ -634,6 +700,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       const plainForm = form.get({ plain: true }) as any;
       return {
         form_id: plainForm.form_id,
+        form_data: plainForm.form_data,
         project_name: plainForm.project.name,
         form_name: plainForm.form_type.form_name,
         submitted_at: plainForm.createdAt
@@ -900,7 +967,7 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
 
     // Date filter: from May 1, 2025 to June 20, 2025 end of day
     const startDate = new Date('2025-05-01T00:00:00.000Z');
-    const endDate = new Date('2025-06-20T23:59:59.999Z'); // June 20, 2025 end of day
+    const endDate = new Date('2025-09-20T23:59:59.999Z'); // June 20, 2025 end of day
 
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
