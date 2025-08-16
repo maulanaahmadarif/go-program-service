@@ -13,8 +13,11 @@ const checkDomain = async (req: AuthenticatedRequest, res: Response, next: NextF
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    // Check if email ends with @fokustarget.com
-    if (!user.email.endsWith('@fokustarget.com')) {
+    // Check if email ends with whitelisted domains
+    const allowedDomains = ['@fokustarget.com', '@go-program.com'];
+    const isAllowedDomain = allowedDomains.some(domain => user.email.endsWith(domain));
+    
+    if (!isAllowedDomain) {
       return res.status(401).json({ message: 'Operation not allowed' });
     }
 
