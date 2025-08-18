@@ -36,12 +36,14 @@ export const approveSubmission = async (req: any, res: Response) => {
       if (numOfAffectedRows > 0) {
         const updatedForm = updatedForms[0]; // Access the first updated record
 
-        // Check if form contains Aura Edition products
+        // Check if form contains Aura Edition or TKDN Product
         let isAuraEdition = false;
         if (updatedForm.form_data && Array.isArray(updatedForm.form_data)) {
           const productsEntry = updatedForm.form_data.find(entry => entry.label === 'products');
           if (productsEntry && Array.isArray(productsEntry.value)) {
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
+              product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+            );
           }
         }
 
@@ -613,12 +615,14 @@ export const getFormSubmission = async (req: Request, res: Response) => {
           }
         }
 
-        // Check if form contains Aura Edition products
+        // Check if form contains Aura Edition or TKDN Product
         let isAuraEdition = false;
         if (plainForm.form_data && Array.isArray(plainForm.form_data)) {
           const productsEntry = plainForm.form_data.find((entry: any) => entry.label === 'products');
           if (productsEntry && Array.isArray(productsEntry.value)) {
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
+              product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+            );
           }
         }
 
@@ -813,12 +817,14 @@ export const downloadSubmission = async (req: Request, res: Response) => {
           item.form_data[0]?.value && Array.isArray(item.form_data[0].value) ? 
           item.form_data[0].value[0]?.numberOfQuantity || 0 : 0;
 
-        // Check if form contains Aura Edition products
+        // Check if form contains Aura Edition or TKDN Product
         let isAuraEdition = false;
         if (item.form_data && Array.isArray(item.form_data)) {
           const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
           if (productsEntry && Array.isArray(productsEntry.value)) {
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
+              product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+            );
           }
         }
 
@@ -909,12 +915,14 @@ export const getReport = async (req: Request, res: Response) => {
       }
     }
 
-    // Check if form contains Aura Edition products
+    // Check if form contains Aura Edition or TKDN Product
     let isAuraEdition = false;
     if (item.form_data && Array.isArray(item.form_data)) {
       const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
       if (productsEntry && Array.isArray(productsEntry.value)) {
-        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => product.productCategory === 'Aura Edition');
+        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
+          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+        );
       }
     }
 

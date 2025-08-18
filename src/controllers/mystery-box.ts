@@ -14,6 +14,18 @@ export const checkEligibility = async (req: any, res: Response) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
+		// Check if current date is after September 3, 2025 (end date)
+		const currentDate = new Date();
+		const endDate = new Date('2025-09-03T23:59:59.999Z');
+		
+		if (currentDate > endDate) {
+			return res.status(200).json({
+				eligible: false,
+				mystery_box: null,
+				reason: "Mystery box program has ended"
+			});
+		}
+
 		// Check if user email is in the whitelist
 		let isEmailWhitelisted = false;
 		try {
@@ -35,6 +47,7 @@ export const checkEligibility = async (req: any, res: Response) => {
 			return res.status(200).json({
 				eligible: false,
 				mystery_box: null,
+				reason: "Email not in whitelist"
 			});
 		}
 
@@ -58,6 +71,7 @@ export const checkEligibility = async (req: any, res: Response) => {
 		res.status(200).json({
 			eligible: isEligible,
 			mystery_box: availableMysteryBox,
+			reason: isEligible ? "User is eligible and has available mystery box" : "No available mystery box found"
 		});
 
 	} catch (error) {

@@ -67,7 +67,7 @@ export const calculateBonusPoints = (formTypeId: number, product_quantity: numbe
     }
   }
 
-  // Apply Aura Edition multiplier if applicable
+  // Apply Aura Edition or TKDN Product multiplier if applicable
   if (isAuraEdition) {
     let multiplier = 5; // Default multiplier for 1-50 quantity
     if (product_quantity > 50 && product_quantity <= 300) {
