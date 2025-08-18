@@ -21,11 +21,12 @@ import {
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
 import checkDomain from "../middleware/domain";
+import checkEmailDomain from "../middleware/emailDomain";
 
 const router = express.Router();
 
-router.post("/login", userLogin);
-router.post("/signup", userSignup);
+router.post("/login", checkEmailDomain, userLogin);
+router.post("/signup", checkEmailDomain, userSignup);
 // router.post('/add-internal-user', addInternalUser)
 router.get("/profile", authenticate, getUserProfile);
 router.get("/list", getUserList);
