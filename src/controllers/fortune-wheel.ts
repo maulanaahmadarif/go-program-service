@@ -15,10 +15,13 @@ export const checkEligibility = async (req: any, res: Response) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// Check total spins
+		// Check total spins since August 20, 2025
 		const spinCount = await FortuneWheelSpin.count({
 			where: {
-				user_id: userId
+				user_id: userId,
+				createdAt: {
+					[Op.gte]: new Date('2025-08-17T00:00:00.000Z')
+				}
 			}
 		});
 
@@ -55,10 +58,13 @@ export const spinWheel = async (req: any, res: Response) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// Check total spins limit
+		// Check total spins limit since August 20, 2025
 		const spinCount = await FortuneWheelSpin.count({
 			where: {
-				user_id: userId
+				user_id: userId,
+				createdAt: {
+					[Op.gte]: new Date('2025-08-17T00:00:00.000Z')
+				}
 			},
 			transaction
 		});

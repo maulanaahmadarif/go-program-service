@@ -359,7 +359,10 @@ export const getUserProfile = async (req: any, res: Response) => {
 		const total_form_approved = await Form.count({
 			where: {
 				user_id: user.user_id,
-				status: 'approved'
+				status: 'approved',
+				createdAt: {
+					[Op.gte]: new Date('2025-08-17T00:00:00.000Z')
+				}
 			}
 		});
 
