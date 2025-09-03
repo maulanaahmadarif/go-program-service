@@ -142,21 +142,131 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
 
 export const redeemList = async (req: Request, res: Response) => {
   try {
-    const list = await Redemption.findAll({
+    const { page = 1, limit = 10, status, start_date, end_date } = req.query;
+
+    // Validate page and limit
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({
+        message: "Page must be a positive integer",
+        status: 400
+      });
+    }
+
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({
+        message: "Limit must be a positive integer between 1 and 100",
+        status: 400
+      });
+    }
+
+    // Validate status if provided
+    if (status && !['active', 'approved', 'rejected'].includes(status as string)) {
+      return res.status(400).json({
+        message: "Status must be either 'active', 'approved', or 'rejected'",
+        status: 400
+      });
+    }
+
+    // Validate date parameters if provided
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (start_date) {
+      startDate = new Date(start_date as string);
+      if (isNaN(startDate.getTime())) {
+        return res.status(400).json({
+          message: "Invalid start_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
+          status: 400
+        });
+      }
+    }
+
+    if (end_date) {
+      endDate = new Date(end_date as string);
+      if (isNaN(endDate.getTime())) {
+        return res.status(400).json({
+          message: "Invalid end_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
+          status: 400
+        });
+      }
+    }
+
+    // Validate that start_date is before end_date if both are provided
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({
+        message: "start_date must be before or equal to end_date",
+        status: 400
+      });
+    }
+
+    // Build where clause
+    const whereClause: any = {};
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Add date range filtering
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      
+      if (startDate) {
+        whereClause.createdAt[Op.gte] = startDate;
+      }
+      
+      if (endDate) {
+        // Set end date to end of day if only date is provided (no time)
+        const endOfDay = new Date(endDate);
+        if (endDate.getHours() === 0 && endDate.getMinutes() === 0 && endDate.getSeconds() === 0) {
+          endOfDay.setHours(23, 59, 59, 999);
+        }
+        whereClause.createdAt[Op.lte] = endOfDay;
+      }
+    }
+
+    // Calculate offset
+    const offset = (pageNum - 1) * limitNum;
+
+    // Get redemptions with pagination
+    const { count, rows: redemptions } = await Redemption.findAndCountAll({
+      where: whereClause,
       include: [
         {
           model: User,
-          attributes: ['username']
+          attributes: ['username', 'email']
         },
         {
           model: Product,
         }
       ],
-      order: [['createdAt', 'ASC']],
+      limit: limitNum,
+      offset: offset,
+      order: [['createdAt', 'DESC']]
     });
-    res.status(200).json({ message: 'Redemption list', status: res.status, data: list });
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(count / limitNum);
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
+
+    res.status(200).json({
+      message: 'Redemption list retrieved successfully',
+      data: redemptions,
+      pagination: {
+        current_page: pageNum,
+        total_pages: totalPages,
+        total_items: count,
+        items_per_page: limitNum,
+        has_next_page: hasNextPage,
+        has_prev_page: hasPrevPage
+      },
+      status: 200
+    });
   } catch (error: any) {
-    console.error('Error delete user:', error);
+    console.error('Error getting redemption list:', error);
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
