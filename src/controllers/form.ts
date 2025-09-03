@@ -104,68 +104,70 @@ export const approveSubmission = async (req: any, res: Response) => {
           user.lifetime_total_points = (user.lifetime_total_points || 0) + totalPoints;
           await user.save({ transaction });
 
+          // UNCOMMENT THIS WHEN THE MYSTERY BOX PROGRAM IS ACTIVE
           // Check for milestone achievements and create mystery boxes
-          const totalApprovedForms = await Form.count({
-            where: {
-              user_id: user.user_id,
-              status: 'approved'
-            },
-            transaction
-          });
+          // const totalApprovedForms = await Form.count({
+          //   where: {
+          //     user_id: user.user_id,
+          //     status: 'approved'
+          //   },
+          //   transaction
+          // });
 
           // Define milestone thresholds
-          const milestones = [5, 10, 50];
+          // const milestones = [5, 10, 50];
           
-          for (const milestone of milestones) {
-            if (totalApprovedForms >= milestone) {
-              // Check if mystery box already exists for this milestone
-              const existingMysteryBox = await UserMysteryBox.findOne({
-                where: {
-                  user_id: user.user_id,
-                  milestone_reached: milestone,
-                },
-                transaction
-              });
+          // for (const milestone of milestones) {
+          //   if (totalApprovedForms >= milestone) {
+          //     // Check if mystery box already exists for this milestone
+          //     const existingMysteryBox = await UserMysteryBox.findOne({
+          //       where: {
+          //         user_id: user.user_id,
+          //         milestone_reached: milestone,
+          //       },
+          //       transaction
+          //     });
 
-              if (!existingMysteryBox) {
-                // Determine product based on milestone and probability
-                let selectedProductId: number;
+          //     if (!existingMysteryBox) {
+          //       // Determine product based on milestone and probability
+          //       let selectedProductId: number;
                 
-                if (milestone === 5) {
-                  // 5 Milestone: 60% +500 points, 40% sbux evoucher
-                  const random = Math.random();
-                  selectedProductId = random < 0.6 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
-                } else if (milestone === 10) {
-                  // 10 Milestone: 30% +500 points, 70% sbux evoucher
-                  const random = Math.random();
-                  selectedProductId = random < 0.3 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
-                } else if (milestone === 50) {
-                  // 50 Milestone: 80% sbux points, 20% airpods pro
-                  const random = Math.random();
-                  selectedProductId = random < 0.8 ? 7 : 9; // 7 = sbux evoucher, 9 = airpods pro
-                } else {
-                  // Fallback to +500 points if milestone doesn't match
-                  selectedProductId = 4;
-                }
+          //       if (milestone === 5) {
+          //         // 5 Milestone: 60% +500 points, 40% sbux evoucher
+          //         const random = Math.random();
+          //         selectedProductId = random < 0.6 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
+          //       } else if (milestone === 10) {
+          //         // 10 Milestone: 30% +500 points, 70% sbux evoucher
+          //         const random = Math.random();
+          //         selectedProductId = random < 0.3 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
+          //       } else if (milestone === 50) {
+          //         // 50 Milestone: 80% sbux points, 20% airpods pro
+          //         const random = Math.random();
+          //         selectedProductId = random < 0.8 ? 7 : 9; // 7 = sbux evoucher, 9 = airpods pro
+          //       } else {
+          //         // Fallback to +500 points if milestone doesn't match
+          //         selectedProductId = 4;
+          //       }
 
-                // Check if selected product has stock available, fallback to +500 points if out of stock
-                if (selectedProductId !== 4) { // Don't check stock for +500 points (ID 4)
-                  const selectedProduct = await Product.findByPk(selectedProductId, { transaction });
-                  if (!selectedProduct || selectedProduct.stock_quantity <= 0) {
-                    selectedProductId = 4; // Fallback to +500 points
-                  }
-                }
+          //       // Check if selected product has stock available, fallback to +500 points if out of stock
+          //       if (selectedProductId !== 4) { // Don't check stock for +500 points (ID 4)
+          //         const selectedProduct = await Product.findByPk(selectedProductId, { transaction });
+          //         if (!selectedProduct || selectedProduct.stock_quantity <= 0) {
+          //           selectedProductId = 4; // Fallback to +500 points
+          //         }
+          //       }
 
-                // Create new mystery box for this milestone with selected product
-                await UserMysteryBox.create({
-                  user_id: user.user_id,
-                  product_id: selectedProductId,
-                  milestone_reached: milestone,
-                  status: 'available'
-                }, { transaction });
-              }
-            }
-          }
+          //       // Create new mystery box for this milestone with selected product
+          //       await UserMysteryBox.create({
+          //         user_id: user.user_id,
+          //         product_id: selectedProductId,
+          //         milestone_reached: milestone,
+          //         status: 'available'
+          //       }, { transaction });
+          //     }
+          //   }
+          // }
+          // END OF UNCOMMENT THIS WHEN THE MYSTERY BOX PROGRAM IS ACTIVE
         }
     
         if (company && formType) {
