@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
 import { Op } from 'sequelize';
+import ExcelJS from 'exceljs';
 
 import { Redemption } from '../../models/Redemption';
 import { User } from '../../models/User';
@@ -142,7 +143,7 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
 
 export const redeemList = async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 10, status, start_date, end_date } = req.query;
+    const { page = 1, limit = 10, status, start_date, end_date, product_id } = req.query;
 
     // Validate page and limit
     const pageNum = parseInt(page as string, 10);
@@ -168,6 +169,18 @@ export const redeemList = async (req: Request, res: Response) => {
         message: "Status must be either 'active', 'approved', or 'rejected'",
         status: 400
       });
+    }
+
+    // Validate product_id if provided
+    let productId: number | undefined;
+    if (product_id) {
+      productId = parseInt(product_id as string, 10);
+      if (isNaN(productId) || productId < 1) {
+        return res.status(400).json({
+          message: "Product ID must be a positive integer",
+          status: 400
+        });
+      }
     }
 
     // Validate date parameters if provided
@@ -207,6 +220,10 @@ export const redeemList = async (req: Request, res: Response) => {
 
     if (status) {
       whereClause.status = status;
+    }
+
+    if (productId) {
+      whereClause.product_id = productId;
     }
 
     // Add date range filtering
@@ -448,3 +465,192 @@ export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) =
     res.status(500).json({ message: 'Something went wrong', error });
   }
 };
+
+export const downloadRedeem = async (req: Request, res: Response) => {
+  try {
+    const { status, start_date, end_date, product_id } = req.query;
+
+    // Validate status if provided
+    if (status && !['active', 'approved', 'rejected'].includes(status as string)) {
+      return res.status(400).json({
+        message: "Status must be either 'active', 'approved', or 'rejected'",
+        status: 400
+      });
+    }
+
+    // Validate product_id if provided
+    let productId: number | undefined;
+    if (product_id) {
+      productId = parseInt(product_id as string, 10);
+      if (isNaN(productId) || productId < 1) {
+        return res.status(400).json({
+          message: "Product ID must be a positive integer",
+          status: 400
+        });
+      }
+    }
+
+    // Validate date parameters if provided
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (start_date) {
+      startDate = new Date(start_date as string);
+      if (isNaN(startDate.getTime())) {
+        return res.status(400).json({
+          message: "Invalid start_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
+          status: 400
+        });
+      }
+    }
+
+    if (end_date) {
+      endDate = new Date(end_date as string);
+      if (isNaN(endDate.getTime())) {
+        return res.status(400).json({
+          message: "Invalid end_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
+          status: 400
+        });
+      }
+    }
+
+    // Validate that start_date is before end_date if both are provided
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({
+        message: "start_date must be before or equal to end_date",
+        status: 400
+      });
+    }
+
+    // Build where clause (same logic as redeemList)
+    const whereClause: any = {};
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (productId) {
+      whereClause.product_id = productId;
+    }
+
+    // Add date range filtering
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      
+      if (startDate) {
+        whereClause.createdAt[Op.gte] = startDate;
+      }
+      
+      if (endDate) {
+        // Set end date to end of day if only date is provided (no time)
+        const endOfDay = new Date(endDate);
+        if (endDate.getHours() === 0 && endDate.getMinutes() === 0 && endDate.getSeconds() === 0) {
+          endOfDay.setHours(23, 59, 59, 999);
+        }
+        whereClause.createdAt[Op.lte] = endOfDay;
+      }
+    }
+
+    // Get all redemptions (no pagination for export)
+    const redemptions = await Redemption.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          attributes: ['username', 'email', 'fullname']
+        },
+        {
+          model: Product,
+          attributes: ['name', 'points_required', 'stock_quantity']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Redemption Data');
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'Redemption ID', key: 'redemption_id', width: 15 },
+      { header: 'Product ID', key: 'product_id', width: 12 },
+      { header: 'Username', key: 'username', width: 20 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Full Name', key: 'fullname', width: 25 },
+      { header: 'Product Name', key: 'product_name', width: 30 },
+      { header: 'Points Spent', key: 'points_spent', width: 15 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Phone Number', key: 'phone_number', width: 18 },
+      { header: 'Postal Code', key: 'postal_code', width: 15 },
+      { header: 'Shipping Address', key: 'shipping_address', width: 40 },
+      { header: 'Notes', key: 'notes', width: 30 },
+      { header: 'Created At', key: 'created_at', width: 20 },
+      { header: 'Updated At', key: 'updated_at', width: 20 }
+    ];
+
+    // Style the header row
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    };
+
+    // Add data rows
+    redemptions.forEach(redemption => {
+      const plainRedemption = redemption.get({ plain: true }) as any;
+      
+      worksheet.addRow({
+        redemption_id: plainRedemption.redemption_id,
+        product_id: plainRedemption.product_id,
+        username: plainRedemption.user?.username || 'N/A',
+        email: plainRedemption.email,
+        fullname: plainRedemption.fullname,
+        product_name: plainRedemption.product?.name || 'N/A',
+        points_spent: plainRedemption.points_spent,
+        status: plainRedemption.status,
+        phone_number: plainRedemption.phone_number,
+        postal_code: plainRedemption.postal_code,
+        shipping_address: plainRedemption.shipping_address,
+        notes: plainRedemption.notes || '',
+        created_at: dayjs(plainRedemption.createdAt).format('YYYY-MM-DD HH:mm:ss'),
+        updated_at: dayjs(plainRedemption.updatedAt).format('YYYY-MM-DD HH:mm:ss')
+      });
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column: any) => {
+      if (column.width) {
+        column.width = Math.min(column.width, 50); // Cap at 50 characters
+      }
+    });
+
+    // Generate filename with timestamp
+    const timestamp = dayjs().format('YYYY-MM-DD_HH-mm-ss');
+    const filename = `redemption_data_${timestamp}.xlsx`;
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Write the workbook to response
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error: any) {
+    console.error('Error downloading redemption data:', error);
+
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    // Handle other types of errors
+    res.status(500).json({ 
+      message: 'Something went wrong while downloading redemption data', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}
