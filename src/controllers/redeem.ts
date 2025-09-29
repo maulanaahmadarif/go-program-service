@@ -299,26 +299,48 @@ export const redeemList = async (req: Request, res: Response) => {
 export const rejectRedeem = async (req: Request, res: Response) => {
   const { redemption_id } = req.body;
   const transaction = await sequelize.transaction();
+  
   try {
-    const redeemDetail = await Redemption.findByPk(redemption_id)
+    if (!redemption_id) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Redemption ID is required' });
+    }
+
+    // Step 1: Get redemption data first, then get related data in parallel
+    const redeemDetail = await Redemption.findByPk(redemption_id, { 
+      transaction,
+      attributes: ['redemption_id', 'user_id', 'product_id', 'points_spent', 'email', 'status']
+    });
 
     if (!redeemDetail) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Redeem data not found' });
     }
 
-    const user = await User.findByPk(redeemDetail.user_id);
+    // Step 2: Get related data in parallel
+    const [user, productDetail] = await Promise.all([
+      User.findByPk(redeemDetail.user_id, { 
+        transaction,
+        attributes: ['user_id', 'username', 'email', 'total_points', 'accomplishment_total_points', 'lifetime_total_points']
+      }),
+      Product.findByPk(redeemDetail.product_id, { 
+        transaction,
+        attributes: ['product_id', 'name', 'stock_quantity']
+      })
+    ]);
 
+    // Validate all required data exists
     if (!user) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'User data not found' });
     }
 
-    const productDetail = await Product.findByPk(redeemDetail.product_id)
-
     if (!productDetail) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Product data not found' });
     }
 
-    // Create point transaction record for returned points
+    // Step 2: Create point transaction record for returned points
     await PointTransaction.create({
       user_id: user.user_id,
       points: redeemDetail.points_spent,
@@ -327,28 +349,54 @@ export const rejectRedeem = async (req: Request, res: Response) => {
       description: `Returned ${redeemDetail.points_spent} points from rejected redemption of ${productDetail.name}`
     }, { transaction });
 
-    // Update all point fields consistently
-    user.total_points = (user.total_points || 0) + redeemDetail.points_spent;
-    user.accomplishment_total_points = (user.accomplishment_total_points || 0) + redeemDetail.points_spent;
-    user.lifetime_total_points = (user.lifetime_total_points || 0) + redeemDetail.points_spent;
-    
-    redeemDetail.status = 'rejected'
-    productDetail.stock_quantity = (productDetail.stock_quantity || 0) + 1;
+    // Step 3: Update all entities in parallel using atomic operations
+    await Promise.all([
+      // Update redemption status
+      Redemption.update(
+        { status: 'rejected' },
+        { where: { redemption_id }, transaction }
+      ),
+      // Update user points atomically
+      User.update({
+        total_points: sequelize.literal(`total_points + ${redeemDetail.points_spent}`),
+        accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${redeemDetail.points_spent}`),
+        lifetime_total_points: sequelize.literal(`lifetime_total_points + ${redeemDetail.points_spent}`)
+      }, {
+        where: { user_id: user.user_id },
+        transaction
+      }),
+      // Update product stock atomically
+      Product.update({
+        stock_quantity: sequelize.literal(`stock_quantity + 1`)
+      }, {
+        where: { product_id: productDetail.product_id },
+        transaction
+      })
+    ]);
 
-    await redeemDetail.save({ transaction });
-    await user.save({ transaction });
-    await productDetail.save({ transaction });
-
+    // Step 4: Commit transaction first
     await transaction.commit();
 
-    let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemRejection.html'), 'utf-8');
+    // Step 5: Send email asynchronously (outside transaction)
+    setImmediate(async () => {
+      try {
+        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemRejection.html'), 'utf-8');
 
-    htmlTemplate = htmlTemplate
-      .replace('{{username}}', user!.username)
+        htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
 
-    await sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate });
+        await sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate });
+      } catch (emailError) {
+        console.error('Error sending rejection email:', emailError);
+        // Don't fail the main operation if email fails
+      }
+    });
 
-    res.status(200).json({ message: 'Redeem process rejected', status: res.status });
+    res.status(200).json({ 
+      message: 'Redeem process rejected', 
+      status: 200,
+      points_returned: redeemDetail.points_spent
+    });
+
   } catch (error: any) {
     await transaction.rollback();
     console.error('Error reject redemption:', error);
@@ -360,65 +408,106 @@ export const rejectRedeem = async (req: Request, res: Response) => {
     }
 
     // Handle other types of errors
-    res.status(500).json({ message: 'Something went wrong', error });
+    res.status(500).json({ 
+      message: 'Something went wrong', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 }
 
 export const approveRedeem = async (req: Request, res: Response) => {
   const { redemption_id } = req.body;
   const transaction = await sequelize.transaction();
+  
   try {
-    const redeemDetail = await Redemption.findByPk(redemption_id)
+    if (!redemption_id) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Redemption ID is required' });
+    }
+
+    // Step 1: Get redemption data first, then get related data in parallel
+    const redeemDetail = await Redemption.findByPk(redemption_id, { 
+      transaction,
+      attributes: ['redemption_id', 'user_id', 'product_id', 'email', 'fullname', 'phone_number', 'shipping_address', 'postal_code', 'createdAt']
+    });
 
     if (!redeemDetail) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Redeem data not found' });
     }
 
-    const user = await User.findByPk(redeemDetail.user_id);
+    // Step 2: Get related data in parallel
+    const [user, productDetail] = await Promise.all([
+      User.findByPk(redeemDetail.user_id, { 
+        transaction,
+        attributes: ['user_id', 'username', 'email', 'total_points', 'accomplishment_total_points']
+      }),
+      Product.findByPk(redeemDetail.product_id, { 
+        transaction,
+        attributes: ['product_id', 'name']
+      })
+    ]);
 
+    // Validate all required data exists
     if (!user) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'User data not found' });
     }
 
-    const productDetail = await Product.findByPk(redeemDetail.product_id)
-
     if (!productDetail) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Product data not found' });
     }
 
-    redeemDetail.status = 'approved'
+    // Step 3: Update redemption status atomically
+    await Redemption.update(
+      { status: 'approved' },
+      { where: { redemption_id }, transaction }
+    );
 
-    await redeemDetail.save({ transaction });
-
-    let htmlTemplate;
-    let emailSubject;
-
-    if (redeemDetail.product_id === 7) {
-      // Use redeemConfirmation.html for Starbucks E-Voucher
-      htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemConfirmation.html'), 'utf-8');
-      htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
-      emailSubject = 'Welcome to Lenovo Go Pro Phase 2 - Starbucks E-Voucher Processing';
-    } else {
-      // Use regular redeemEmail.html for other products
-      htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
-      htmlTemplate = htmlTemplate
-        .replace('{{redemptionDate}}', dayjs(redeemDetail.createdAt).format('DD MMM YYYY HH:mm'))
-        .replace('{{redemptionItem}}', productDetail!.name)
-        .replace('{{partnerName}}', redeemDetail.fullname)
-        .replace('{{email}}', redeemDetail.email)
-        .replace('{{phoneNumber}}', redeemDetail.phone_number)
-        .replace('{{address}}', redeemDetail.shipping_address)
-        .replace('{{postalCode}}', redeemDetail.postal_code)
-        .replace('{{accomplishmentScore}}', String(user?.accomplishment_total_points ?? 'N/A'))
-        .replace('{{currentScore}}', String(user?.total_points ?? 'N/A'));
-      emailSubject = 'Lenovo Go Pro Redemption Notification';
-    }
-
-    await sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate });
-
+    // Step 4: Commit transaction first
     await transaction.commit();
 
-    res.status(200).json({ message: 'Redeem process approved', status: res.status });
+    // Step 5: Send email asynchronously (outside transaction)
+    setImmediate(async () => {
+      try {
+        let htmlTemplate: string;
+        let emailSubject: string;
+
+        if (redeemDetail.product_id === 7) {
+          // Use redeemConfirmation.html for Starbucks E-Voucher
+          htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemConfirmation.html'), 'utf-8');
+          htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
+          emailSubject = 'Welcome to Lenovo Go Pro Phase 2 - Starbucks E-Voucher Processing';
+        } else {
+          // Use regular redeemEmail.html for other products
+          htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
+          htmlTemplate = htmlTemplate
+            .replace('{{redemptionDate}}', dayjs(redeemDetail.createdAt).format('DD MMM YYYY HH:mm'))
+            .replace('{{redemptionItem}}', productDetail.name)
+            .replace('{{partnerName}}', redeemDetail.fullname)
+            .replace('{{email}}', redeemDetail.email)
+            .replace('{{phoneNumber}}', redeemDetail.phone_number)
+            .replace('{{address}}', redeemDetail.shipping_address)
+            .replace('{{postalCode}}', redeemDetail.postal_code)
+            .replace('{{accomplishmentScore}}', String(user.accomplishment_total_points ?? 'N/A'))
+            .replace('{{currentScore}}', String(user.total_points ?? 'N/A'));
+          emailSubject = 'Lenovo Go Pro Redemption Notification';
+        }
+
+        await sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate });
+      } catch (emailError) {
+        console.error('Error sending approval email:', emailError);
+        // Don't fail the main operation if email fails
+      }
+    });
+
+    res.status(200).json({ 
+      message: 'Redeem process approved', 
+      status: 200,
+      product_name: productDetail.name
+    });
+
   } catch (error: any) {
     await transaction.rollback();
     console.error('Error approve redemption:', error);
@@ -430,7 +519,10 @@ export const approveRedeem = async (req: Request, res: Response) => {
     }
 
     // Handle other types of errors
-    res.status(500).json({ message: 'Something went wrong', error });
+    res.status(500).json({ 
+      message: 'Something went wrong', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 }
 
