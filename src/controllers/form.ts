@@ -27,181 +27,164 @@ export const approveSubmission = async (req: any, res: Response) => {
   const transaction = await sequelize.transaction();
 
   try {
-    if (form_id) {
-      const [numOfAffectedRows, updatedForms] = await Form.update(
-        { status: 'approved' },
-        { where: { form_id }, returning: true, transaction }
-      )
+    if (!form_id) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Form ID is required', status: 400 });
+    }
 
-      if (numOfAffectedRows > 0) {
-        const updatedForm = updatedForms[0]; // Access the first updated record
+    // Step 1: Update form status and get the updated form with all related data in one query
+    const [numOfAffectedRows, updatedForms] = await Form.update(
+      { status: 'approved' },
+      { where: { form_id }, returning: true, transaction }
+    );
 
-        // Check if form contains Aura Edition or TKDN Product
-        let isAuraEdition = false;
-        if (updatedForm.form_data && Array.isArray(updatedForm.form_data)) {
-          const productsEntry = updatedForm.form_data.find(entry => entry.label === 'products');
-          if (productsEntry && Array.isArray(productsEntry.value)) {
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
-              product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-            );
-          }
-        }
+    if (numOfAffectedRows === 0) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Form not found', status: 404 });
+    }
 
-        let additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity, isAuraEdition);
+    const updatedForm = updatedForms[0];
 
-        const user = await User.findByPk(updatedForm.user_id, { transaction });
-        const company = await Company.findByPk(user?.company_id, { transaction });
-        const formType = await FormType.findByPk(updatedForm.form_type_id, { transaction });
-        // Check for completion bonus based on user type
-        const currentDate = dayjs();
-        const targetDate = dayjs('2025-09-20');
-        
-        if (currentDate.isBefore(targetDate)) {
-          const additionalPointCompletionPoint = 200;
-          
-          const approvedSubmissionsCount = await Form.count({
-            where: {
-              user_id: updatedForm.user_id,
-              project_id: updatedForm.project_id,
-              status: 'approved'
-            },
-            transaction
-          });
+    // Step 2: Get all required data in parallel queries
+    const [user, formType, project] = await Promise.all([
+      User.findByPk(updatedForm.user_id, { 
+        transaction,
+        attributes: ['user_id', 'username', 'email', 'user_type', 'company_id', 'total_points', 'accomplishment_total_points', 'lifetime_total_points']
+      }),
+      FormType.findByPk(updatedForm.form_type_id, { 
+        transaction,
+        attributes: ['form_type_id', 'form_name', 'point_reward']
+      }),
+      Project.findByPk(updatedForm.project_id, { 
+        transaction,
+        attributes: ['project_id', 'name']
+      })
+    ]);
 
-          if (user?.user_type === 'T2' && approvedSubmissionsCount === 4) {
-            additionalPoint += additionalPointCompletionPoint; // Add bonus points for T2 user completing 6 submissions
-          } else if (user?.user_type === 'T1' && approvedSubmissionsCount === 4) {
-            additionalPoint += additionalPointCompletionPoint; // Add bonus points for T1 user completing 4 submissions
-          }
-        }
+    // Get company data if needed (for potential future business logic)
+    const company = user ? await Company.findByPk(user.company_id, { 
+      transaction,
+      attributes: ['company_id', 'name']
+    }) : null;
 
-        if (user && formType) {
-          const basePoints = formType.point_reward;
-          const totalPoints = basePoints + additionalPoint;
-          
-          // Create point transaction record for base points
-          await PointTransaction.create({
-            user_id: user.user_id,
-            points: basePoints,
-            transaction_type: 'earn',
-            form_id: Number(form_id),
-            description: `Earned ${basePoints} base points for form submission: ${formType.form_name}`
-          }, { transaction });
+    if (!user || !formType || !project) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Required data not found', status: 404 });
+    }
 
-          // Create point transaction record for bonus points if any
-          if (additionalPoint > 0) {
-            await PointTransaction.create({
-              user_id: user.user_id,
-              points: additionalPoint,
-              transaction_type: 'earn',
-              form_id: Number(form_id),
-              description: `Earned ${additionalPoint} bonus points for form submission: ${formType.form_name}`
-            }, { transaction });
-          }
-
-          user.total_points = (user.total_points || 0) + totalPoints;
-          user.accomplishment_total_points = (user.accomplishment_total_points || 0) + totalPoints;
-          user.lifetime_total_points = (user.lifetime_total_points || 0) + totalPoints;
-          await user.save({ transaction });
-
-          // UNCOMMENT THIS WHEN THE MYSTERY BOX PROGRAM IS ACTIVE
-          // Check for milestone achievements and create mystery boxes
-          // const totalApprovedForms = await Form.count({
-          //   where: {
-          //     user_id: user.user_id,
-          //     status: 'approved'
-          //   },
-          //   transaction
-          // });
-
-          // Define milestone thresholds
-          // const milestones = [5, 10, 50];
-          
-          // for (const milestone of milestones) {
-          //   if (totalApprovedForms >= milestone) {
-          //     // Check if mystery box already exists for this milestone
-          //     const existingMysteryBox = await UserMysteryBox.findOne({
-          //       where: {
-          //         user_id: user.user_id,
-          //         milestone_reached: milestone,
-          //       },
-          //       transaction
-          //     });
-
-          //     if (!existingMysteryBox) {
-          //       // Determine product based on milestone and probability
-          //       let selectedProductId: number;
-                
-          //       if (milestone === 5) {
-          //         // 5 Milestone: 60% +500 points, 40% sbux evoucher
-          //         const random = Math.random();
-          //         selectedProductId = random < 0.6 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
-          //       } else if (milestone === 10) {
-          //         // 10 Milestone: 30% +500 points, 70% sbux evoucher
-          //         const random = Math.random();
-          //         selectedProductId = random < 0.3 ? 4 : 7; // 4 = +500 points, 7 = sbux evoucher
-          //       } else if (milestone === 50) {
-          //         // 50 Milestone: 80% sbux points, 20% airpods pro
-          //         const random = Math.random();
-          //         selectedProductId = random < 0.8 ? 7 : 9; // 7 = sbux evoucher, 9 = airpods pro
-          //       } else {
-          //         // Fallback to +500 points if milestone doesn't match
-          //         selectedProductId = 4;
-          //       }
-
-          //       // Check if selected product has stock available, fallback to +500 points if out of stock
-          //       if (selectedProductId !== 4) { // Don't check stock for +500 points (ID 4)
-          //         const selectedProduct = await Product.findByPk(selectedProductId, { transaction });
-          //         if (!selectedProduct || selectedProduct.stock_quantity <= 0) {
-          //           selectedProductId = 4; // Fallback to +500 points
-          //         }
-          //       }
-
-          //       // Create new mystery box for this milestone with selected product
-          //       await UserMysteryBox.create({
-          //         user_id: user.user_id,
-          //         product_id: selectedProductId,
-          //         milestone_reached: milestone,
-          //         status: 'available'
-          //       }, { transaction });
-          //     }
-          //   }
-          // }
-          // END OF UNCOMMENT THIS WHEN THE MYSTERY BOX PROGRAM IS ACTIVE
-        }
-    
-        if (company && formType) {
-          await company.save({ transaction });
-        }
-
-        // Get project information for email
-        const project = await Project.findByPk(updatedForm.project_id, { transaction });
-
-        await transaction.commit();
-
-        // Send approval email after successful transaction
-        if (user && project && formType) {
-          let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
-
-          htmlTemplate = htmlTemplate
-            .replace('{{username}}', user.username)
-            .replace('{{project}}', project.name)
-            .replace('{{milestone}}', formType.form_name);
-
-          await sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate });
-        }
-
-        res.status(200).json({ message: 'Form approved successfully', status: res.status });
-        return;
+    // Step 3: Check if form contains Aura Edition or TKDN Product (optimized)
+    let isAuraEdition = false;
+    if (updatedForm.form_data && Array.isArray(updatedForm.form_data)) {
+      const productsEntry = updatedForm.form_data.find(entry => entry.label === 'products');
+      if (productsEntry && Array.isArray(productsEntry.value)) {
+        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
+          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+        );
       }
     }
 
-    await transaction.rollback();
-    res.status(404).json({ message: 'Form not found', status: res.status });
-  } catch (error) {
+    let additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity, isAuraEdition);
+
+    // Step 4: Check for completion bonus (only if needed)
+    const currentDate = dayjs();
+    const targetDate = dayjs('2025-09-20');
+    
+    if (currentDate.isBefore(targetDate) && (user.user_type === 'T1' || user.user_type === 'T2')) {
+      const additionalPointCompletionPoint = 200;
+      
+      // Only count if user type requires completion bonus
+      const approvedSubmissionsCount = await Form.count({
+        where: {
+          user_id: updatedForm.user_id,
+          project_id: updatedForm.project_id,
+          status: 'approved'
+        },
+        transaction
+      });
+
+      if ((user.user_type === 'T2' || user.user_type === 'T1') && approvedSubmissionsCount === 4) {
+        additionalPoint += additionalPointCompletionPoint;
+      }
+    }
+
+    // Step 5: Calculate points and create single point transaction
+    const basePoints = formType.point_reward;
+    const totalPoints = basePoints + additionalPoint;
+    
+    // Create single point transaction record (combining base + bonus)
+    await PointTransaction.create({
+      user_id: user.user_id,
+      points: totalPoints,
+      transaction_type: 'earn',
+      form_id: Number(form_id),
+      description: `Earned ${totalPoints} points (${basePoints} base + ${additionalPoint} bonus) for form submission: ${formType.form_name}`
+    }, { transaction });
+
+    // Step 6: Update user points in one operation
+    await User.update({
+      total_points: sequelize.literal(`total_points + ${totalPoints}`),
+      accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${totalPoints}`),
+      lifetime_total_points: sequelize.literal(`lifetime_total_points + ${totalPoints}`)
+    }, {
+      where: { user_id: user.user_id },
+      transaction
+    });
+
+    // Step 7: Create user action record (preserving original business logic)
+    await UserAction.create({
+      user_id: user.user_id,
+      entity_type: 'FORM',
+      action_type: 'APPROVED',
+      form_id: Number(form_id),
+    }, { transaction });
+
+    // Step 8: Save company if needed (preserving original business logic)
+    if (company && formType) {
+      await company.save({ transaction });
+    }
+
+    // Step 9: Commit transaction first
+    await transaction.commit();
+
+    // Step 10: Send email asynchronously (outside transaction)
+    setImmediate(async () => {
+      try {
+        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
+
+        htmlTemplate = htmlTemplate
+          .replace('{{username}}', user.username)
+          .replace('{{project}}', project.name)
+          .replace('{{milestone}}', formType.form_name);
+
+        await sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate });
+      } catch (emailError) {
+        console.error('Error sending approval email:', emailError);
+        // Don't fail the main operation if email fails
+      }
+    });
+
+    res.status(200).json({ 
+      message: 'Form approved successfully', 
+      status: 200,
+      points_awarded: totalPoints,
+      base_points: basePoints,
+      bonus_points: additionalPoint
+    });
+
+  } catch (error: any) {
     await transaction.rollback();
     console.error('Error approving form:', error);
-    res.status(500).json({ message: 'Something went wrong', error });
+    
+    // Handle validation errors from Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map((err: any) => err.message);
+      return res.status(400).json({ message: 'Validation error', errors: messages });
+    }
+
+    res.status(500).json({ 
+      message: 'Something went wrong', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
