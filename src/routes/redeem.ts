@@ -6,7 +6,7 @@ import checkDomain from '../middleware/domain';
 
 const router = express.Router();
 
-router.post('/redeem', authenticate, redeemPoint);
+router.post('/redeem', authenticate, checkDomain, redeemPoint);
 router.get('/list', authenticate, redeemList);
 router.get('/download', authenticate, downloadRedeem);
 router.post('/reject', authenticate, rejectRedeem)

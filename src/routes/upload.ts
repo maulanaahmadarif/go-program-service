@@ -8,8 +8,9 @@ import checkDomain from "../middleware/domain";
 const router = express.Router();
 
 router.post(
-	"/file",
+	"/file",	
 	authenticate,
+	checkDomain,
 	upload.single("file"),
 	uploadFile,
 );
