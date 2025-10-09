@@ -41,10 +41,4 @@ export const sequelize = new Sequelize({
 		UserMysteryBox,
 	],
 	dialect: dbConfig.dialect,
-	dialectOptions: {
-		ssl: {
-			require: true,
-			rejectUnauthorized: false, // Disable strict SSL for testing (use with caution in production)
-		},
-	},
 });

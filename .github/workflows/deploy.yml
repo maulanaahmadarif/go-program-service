@@ -1,0 +1,211 @@
+name: 🚀 Deploy Go Pro Lenovo Service
+
+on:
+  push:
+    branches:
+      - main
+
+# Add permissions to the workflow
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/goprolenovo-service
+
+    steps:
+    - name: 🧾 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐳 Login to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: 📦 Write .env.production
+      run: echo "${{ secrets.ENV_FILE }}" > .env.production
+
+    - name: 🛠️ Build Docker image
+      run: |
+        docker build -t $IMAGE_NAME:latest .
+
+    - name: 🚀 Push to Docker Hub
+      run: |
+        docker push $IMAGE_NAME:latest
+
+    - name: 🔁 SSH Deploy & Restart Container
+      uses: appleboy/ssh-action@v1.2.2
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          export KUBECONFIG=~/.kube/config
+
+          echo "🔄 Force restarting deployment..."
+          kubectl rollout restart deployment/goprolenovo-service -n goprolenovo
+
+          echo "✅ Deployment complete"
+          
+          echo "⏳ Waiting for rollout to finish..."
+          kubectl rollout status deployment/goprolenovo-service -n goprolenovo
+
+  version-tagging:
+    name: Create Release and Tag
+    needs: [deploy]  # Explicitly depend on pipeline job
+    if: |
+      success() &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest tag
+        id: get-latest-tag
+        run: |
+          # Get the latest tag, if no tags exist, start with v0.0.0
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "latest-tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
+
+      - name: Determine version bump
+        id: version-bump
+        run: |
+          # Get commits since last tag
+          if [ "${{ steps.get-latest-tag.outputs.latest-tag }}" = "v0.0.0" ]; then
+            COMMITS=$(git log --oneline)
+          else
+            COMMITS=$(git log ${{ steps.get-latest-tag.outputs.latest-tag }}..HEAD --oneline)
+          fi
+          
+          echo "Commits since last tag:"
+          echo "$COMMITS"
+          
+          # Determine version bump based on commit messages
+          MAJOR_BUMP=false
+          MINOR_BUMP=false
+          PATCH_BUMP=false
+          
+          while IFS= read -r commit; do
+            if echo "$commit" | grep -qE "(BREAKING CHANGE|break:|major:)"; then
+              MAJOR_BUMP=true
+            elif echo "$commit" | grep -qE "(feat:|feature:)"; then
+              MINOR_BUMP=true
+            elif echo "$commit" | grep -qE "(fix:|patch:|chore:|docs:)"; then
+              PATCH_BUMP=true
+            fi
+          done <<< "$COMMITS"
+          
+          # Parse current version
+          CURRENT_VERSION="${{ steps.get-latest-tag.outputs.latest-tag }}"
+          if [ "$CURRENT_VERSION" = "v0.0.0" ]; then
+            MAJOR=1
+            MINOR=0
+            PATCH=0
+          else
+            VERSION_NUMBER=${CURRENT_VERSION#v}
+            MAJOR=$(echo $VERSION_NUMBER | cut -d. -f1)
+            MINOR=$(echo $VERSION_NUMBER | cut -d. -f2)
+            PATCH=$(echo $VERSION_NUMBER | cut -d. -f3)
+          fi
+          
+          # Calculate new version
+          if [ "$MAJOR_BUMP" = true ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$MINOR_BUMP" = true ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          elif [ "$PATCH_BUMP" = true ]; then
+            PATCH=$((PATCH + 1))
+          else
+            # Default to patch bump if no specific pattern found
+            PATCH=$((PATCH + 1))
+          fi
+          
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Create tag
+        id: create-tag
+        run: |
+          NEW_VERSION="${{ steps.version-bump.outputs.new-version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a $NEW_VERSION -m "Release $NEW_VERSION"
+          git push origin $NEW_VERSION
+          echo "tag-created=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          NEW_VERSION="${{ steps.version-bump.outputs.new-version }}"
+          PREVIOUS_TAG="${{ steps.get-latest-tag.outputs.latest-tag }}"
+          
+          # Generate release notes with contributors
+          echo "## What's Changed" > release_notes.md
+          echo "" >> release_notes.md
+          
+          if [ "$PREVIOUS_TAG" = "v0.0.0" ]; then
+            echo "🎉 Initial release" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "### All Changes:" >> release_notes.md
+            git log --oneline --no-merges --pretty=format:"- %s by @%an" >> release_notes.md
+          else
+            # Get commits between tags with author information, excluding merge commits
+            git log $PREVIOUS_TAG..HEAD --oneline --no-merges --pretty=format:"- %s by @%an" >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          # Add contributors section
+          echo "## Contributors" >> release_notes.md
+          echo "" >> release_notes.md
+          if [ "$PREVIOUS_TAG" = "v0.0.0" ]; then
+            git log --no-merges --pretty=format:"%an <%ae>" | sort -u | while read contributor; do
+              name=$(echo "$contributor" | cut -d'<' -f1 | xargs)
+              email=$(echo "$contributor" | cut -d'<' -f2 | cut -d'>' -f1)
+              echo "- **$name** ($email)" >> release_notes.md
+            done
+          else
+            git log $PREVIOUS_TAG..HEAD --no-merges --pretty=format:"%an <%ae>" | sort -u | while read contributor; do
+              name=$(echo "$contributor" | cut -d'<' -f1 | xargs)
+              email=$(echo "$contributor" | cut -d'<' -f2 | cut -d'>' -f1)
+              echo "- **$name** ($email)" >> release_notes.md
+            done
+          fi
+          
+          echo "" >> release_notes.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREVIOUS_TAG...$NEW_VERSION" >> release_notes.md
+          
+          # Read the content for GitHub output
+          RELEASE_NOTES=$(cat release_notes.md)
+          echo "release-notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version-bump.outputs.new-version }}
+          release_name: Release ${{ steps.version-bump.outputs.new-version }}
+          body: ${{ steps.release-notes.outputs.release-notes }}
+          draft: false
+          prerelease: false
+
+      - name: Print release info
+        run: |
+          echo "✅ Release created successfully!"
+          echo "🏷️ Tag: ${{ steps.version-bump.outputs.new-version }}"
+          echo "📝 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version-bump.outputs.new-version }}"
