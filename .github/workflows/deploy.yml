@@ -45,12 +45,12 @@ jobs:
           export KUBECONFIG=~/.kube/config
 
           echo "🔄 Force restarting deployment..."
-          kubectl rollout restart deployment/goprolenovo-service -n goprolenovo
+          kubectl rollout restart deployment/goprolenovo-app -n goprolenovo
 
           echo "✅ Deployment complete"
           
           echo "⏳ Waiting for rollout to finish..."
-          kubectl rollout status deployment/goprolenovo-service -n goprolenovo
+          kubectl rollout status deployment/goprolenovo-app -n goprolenovo
 
   version-tagging:
     name: Create Release and Tag
