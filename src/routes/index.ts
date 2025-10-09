@@ -11,8 +11,12 @@ import redeemRoutes from './redeem';
 import detailsRoutes from './details';
 import fortuneWheelRoutes from './fortune-wheel';
 import mysteryBoxRoutes from './mystery-box';
+import healthRoutes from './health';
 
 const router = express.Router();
+
+// Health check routes (no /api prefix needed, will be added at root level)
+router.use('/health', healthRoutes);
 
 router.use('/user', userRoutes);
 router.use('/form', formRoutes);
