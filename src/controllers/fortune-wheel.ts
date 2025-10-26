@@ -20,7 +20,7 @@ export const checkEligibility = async (req: any, res: Response) => {
 			where: {
 				user_id: userId,
 				createdAt: {
-					[Op.gte]: new Date('2025-08-17T00:00:00.000Z')
+					[Op.gte]: new Date('2025-10-20T00:00:00.000Z')
 				}
 			}
 		});
@@ -63,7 +63,7 @@ export const spinWheel = async (req: any, res: Response) => {
 			where: {
 				user_id: userId,
 				createdAt: {
-					[Op.gte]: new Date('2025-08-17T00:00:00.000Z')
+					[Op.gte]: new Date('2025-10-20T00:00:00.000Z')
 				}
 			},
 			transaction

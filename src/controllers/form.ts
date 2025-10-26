@@ -87,7 +87,7 @@ export const approveSubmission = async (req: any, res: Response) => {
 
     // Step 4: Check for completion bonus (only if needed)
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-09-20');
+    const targetDate = dayjs('2025-12-30');
     
     if (currentDate.isBefore(targetDate) && (user.user_type === 'T1' || user.user_type === 'T2')) {
       const additionalPointCompletionPoint = 200;
@@ -312,7 +312,7 @@ export const formSubmission = async (req: any, res: Response) => {
     });
 
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-06-30');
+    const targetDate = dayjs('2025-12-30');
   
     if (currentDate.isBefore(targetDate, 'day')) {
       if (user?.user_type === 'T2') {
@@ -329,8 +329,8 @@ export const formSubmission = async (req: any, res: Response) => {
     // Check for form type 4 bonus points
     if (form_type_id === 4 && user) {
       // Check if submission is within the date range: May 1, 2025 to June 20, 2025 end of day
-      const startDate = dayjs('2025-08-17T00:00:00');
-      const cutoffDate = dayjs('2025-09-20T23:59:59');
+      const startDate = dayjs('2025-10-20T00:00:00');
+      const cutoffDate = dayjs('2025-12-30T23:59:59');
       
       if (currentDate.isAfter(startDate) && currentDate.isBefore(cutoffDate)) {
         const type4SubmittedCount = await Form.count({
@@ -338,8 +338,8 @@ export const formSubmission = async (req: any, res: Response) => {
             user_id: userId,
             form_type_id: 4,
             createdAt: {
-              [Op.gte]: new Date('2025-08-17T00:00:00.000Z'),
-              [Op.lte]: new Date('2025-09-20T23:59:59.999Z')
+              [Op.gte]: new Date('2025-10-20T00:00:00.000Z'),
+              [Op.lte]: new Date('2025-12-30T23:59:59.999Z')
             }
           },
           transaction
@@ -663,8 +663,8 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
     if (form_type_id) {
       whereClause.form_type_id = form_type_id;
       whereClause.createdAt = {
-        [Op.gte]: new Date('2025-08-17T00:00:00.000Z'),
-        [Op.lte]: new Date('2025-09-20T23:59:59.999Z')
+        [Op.gte]: new Date('2025-10-20T00:00:00.000Z'),
+        [Op.lte]: new Date('2025-12-30T23:59:59.999Z')
       };
     }
 
@@ -958,8 +958,8 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
     }
 
     // Date filter: from May 1, 2025 to June 20, 2025 end of day
-    const startDate = new Date('2025-08-17T00:00:00.000Z');
-    const endDate = new Date('2025-09-20T23:59:59.999Z'); // June 20, 2025 end of day
+    const startDate = new Date('2025-10-20T00:00:00.000Z');
+    const endDate = new Date('2025-12-30T23:59:59.999Z'); // June 20, 2025 end of day
 
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
@@ -1032,6 +1032,144 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
     console.error('Error fetching form type users:', error);
     res.status(500).json({ 
       message: 'An error occurred while fetching users with form type submissions',
+      error 
+    });
+  }
+};
+
+export const getChampions = async (req: Request, res: Response) => {
+  try {
+    // Get all approved submissions for form type 4 (quotation forms)
+    const quotationForms = await Form.findAll({
+      where: {
+        status: 'approved',
+        form_type_id: 4
+      },
+      include: [
+        {
+          model: User,
+          attributes: ['user_id', 'username', 'fullname', 'email', 'total_points']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Get champion for form type 5 (close deal)
+    const formType5Champion = await sequelize.query(`
+      SELECT 
+        u.user_id,
+        u.username,
+        u.fullname,
+        u.email,
+        u.total_points,
+        COUNT(f.form_id) as approved_submissions_count,
+        'Form Type 5' as category,
+        5 as form_type_id
+      FROM users u
+      INNER JOIN forms f ON u.user_id = f.user_id
+      INNER JOIN form_types ft ON f.form_type_id = ft.form_type_id
+      WHERE f.status = 'approved' 
+        AND f.form_type_id = 5
+      GROUP BY u.user_id, u.username, u.fullname, u.email, u.total_points
+      ORDER BY approved_submissions_count DESC, u.total_points DESC
+      LIMIT 1
+    `, {
+      type: QueryTypes.SELECT
+    });
+
+    // Process quotation forms to count TKDN and Aura Edition submissions per user
+    const userCounts: { [key: number]: { tkdn: number; auraEdition: number; user: any } } = {};
+
+    quotationForms.forEach(form => {
+      const plainForm = form.get({ plain: true }) as any;
+      const userId = plainForm.user_id;
+      
+      if (!userCounts[userId]) {
+        userCounts[userId] = {
+          tkdn: 0,
+          auraEdition: 0,
+          user: plainForm.user
+        };
+      }
+
+      // Check if form_data contains TKDN Product or Aura Edition
+      if (plainForm.form_data && Array.isArray(plainForm.form_data)) {
+        const hasTKDNProduct = plainForm.form_data.some((item: any) => {
+          if (item.value && Array.isArray(item.value)) {
+            return item.value.some((val: any) => val.productCategory === "TKDN Product");
+          }
+          return false;
+        });
+
+        const hasAuraEdition = plainForm.form_data.some((item: any) => {
+          if (item.value && Array.isArray(item.value)) {
+            return item.value.some((val: any) => val.productCategory === "Aura Edition");
+          }
+          return false;
+        });
+
+        if (hasTKDNProduct) userCounts[userId].tkdn += 1;
+        if (hasAuraEdition) userCounts[userId].auraEdition += 1;
+      }
+    });
+
+    // Find champions for each category
+    let tkdnChampion = null;
+    let auraChampion = null;
+
+    // Find TKDN champion
+    const tkdnEntries = Object.entries(userCounts).filter(([_, counts]) => counts.tkdn > 0);
+    if (tkdnEntries.length > 0) {
+      const [userId, counts] = tkdnEntries.reduce((max, current) => {
+        return current[1].tkdn > max[1].tkdn ? current : max;
+      });
+      
+      tkdnChampion = {
+        user_id: parseInt(userId),
+        username: counts.user.username,
+        fullname: counts.user.fullname,
+        email: counts.user.email,
+        total_points: counts.user.total_points,
+        approved_submissions_count: counts.tkdn,
+        category: 'TKDN Product',
+        form_type_id: 4
+      };
+    }
+
+    // Find Aura Edition champion
+    const auraEntries = Object.entries(userCounts).filter(([_, counts]) => counts.auraEdition > 0);
+    if (auraEntries.length > 0) {
+      const [userId, counts] = auraEntries.reduce((max, current) => {
+        return current[1].auraEdition > max[1].auraEdition ? current : max;
+      });
+      
+      auraChampion = {
+        user_id: parseInt(userId),
+        username: counts.user.username,
+        fullname: counts.user.fullname,
+        email: counts.user.email,
+        total_points: counts.user.total_points,
+        approved_submissions_count: counts.auraEdition,
+        category: 'Aura Edition',
+        form_type_id: 4
+      };
+    }
+
+    const champions = {
+      tkdn_champion: tkdnChampion,
+      aura_champion: auraChampion,
+      close_deal_champion: formType5Champion[0] || null
+    };
+
+    res.status(200).json({
+      message: 'Champions list retrieved successfully',
+      data: champions
+    });
+
+  } catch (error) {
+    console.error('Error fetching champions:', error);
+    res.status(500).json({ 
+      message: 'An error occurred while fetching champions',
       error 
     });
   }

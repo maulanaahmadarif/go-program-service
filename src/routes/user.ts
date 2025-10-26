@@ -20,7 +20,6 @@ import {
   getCurrentUserReferrals,
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
-import checkDomain from "../middleware/domain";
 import checkEmailDomain from "../middleware/emailDomain";
 
 const router = express.Router();

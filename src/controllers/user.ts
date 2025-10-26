@@ -337,7 +337,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 				{
 					model: User,
 					as: "referrer",
-					attributes: ["username", "referral_code"],
+					attributes: ["username", "referral_code", "user_type"],
 				},
 			],
 		});
@@ -361,7 +361,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 				user_id: user.user_id,
 				status: 'approved',
 				createdAt: {
-					[Op.gte]: new Date('2025-08-17T00:00:00.000Z')
+					[Op.gte]: new Date('2025-10-20T00:00:00.000Z')
 				}
 			}
 		});
@@ -383,12 +383,13 @@ export const getUserProfile = async (req: any, res: Response) => {
 			fullname: user.fullname,
 			user_type: user.user_type,
 			total_form_approved: total_form_approved,
+			user_referral_code: user.referral_code,
 			// For T2 users, show the referral code they used during signup
-			referral_code:
-				plainUser.user_type === "T2"
-					? plainUser.referrer?.referral_code || null
-					: plainUser.referral_code,
+			referred_code: plainUser.referrer?.referral_code || null,
 			referred_by: plainUser.referrer?.username || null,
+			referred_user_type: plainUser.referrer?.user_type === 'T1' ? 'Distributor' : 
+								plainUser.referrer?.user_type === 'T2' ? 'Partner' : 
+								plainUser.referrer?.user_type || null,
 		};
 
 		// Basic response validation: Check required fields

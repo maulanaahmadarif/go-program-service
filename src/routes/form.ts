@@ -12,6 +12,7 @@ import {
 	getReport,
 	getFormSubmissionByUserId,
 	getFormTypeUsers,
+	getChampions,
 } from "../controllers/form";
 import authenticate from "../middleware/auth";
 import checkDomain from "../middleware/domain";
@@ -25,6 +26,7 @@ router.delete("/delete/:form_id", authenticate, deleteForm);
 router.get("/submission", authenticate, getFormSubmission);
 router.get("/submission/user", authenticate, getFormSubmissionByUserId);
 router.get("/submission/type-users", authenticate, getFormTypeUsers);
+router.get("/champions", getChampions);
 router.post("/approve/:form_id", authenticate, approveSubmission);
 router.get("/submission/download", authenticate, downloadSubmission);
 router.get("/submission/report", getReport);
