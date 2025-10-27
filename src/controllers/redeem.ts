@@ -652,7 +652,9 @@ export const rejectRedeem = async (req: Request, res: Response) => {
 
         htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
 
-        await sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate });
+        sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate }).catch(err => {
+          console.error('Email failed:', err);
+        });
       } catch (emailError) {
         console.error('Error sending rejection email:', emailError);
         // Don't fail the main operation if email fails
@@ -763,7 +765,9 @@ export const approveRedeem = async (req: Request, res: Response) => {
           emailSubject = 'Lenovo Go Pro Redemption Notification';
         }
 
-        await sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate });
+        sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate }).catch(err => {
+          console.error('Email failed:', err);
+        });
       } catch (emailError) {
         console.error('Error sending approval email:', emailError);
         // Don't fail the main operation if email fails

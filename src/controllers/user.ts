@@ -266,11 +266,13 @@ export const userSignup = async (req: Request, res: Response) => {
 					`${process.env.APP_URL}/email-confirmation?token=${verificationToken}`,
 				);
 
-			await sendEmail({
+			sendEmail({
 				to: user.email,
 				bcc: process.env.EMAIL_BCC,
 				subject: "Email Confirmation - Lenovo Go Pro Program",
 				html: htmlTemplate,
+			}).catch(err => {
+				console.error('Email failed:', err);
 			});
 
 			// Return the created user
@@ -528,11 +530,13 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
 		// Send email
 		const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}`;
-		await sendEmail({
+		sendEmail({
 			to: email,
 			bcc: process.env.EMAIL_BCC,
 			subject: "Password Reset",
 			html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
+		}).catch(err => {
+			console.error('Email failed:', err);
 		});
 
 		res.status(200).json({ message: "Reset link sent to your email" });
@@ -580,10 +584,12 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
 			.replace("{{homePageLink}}", process.env.APP_URL as string)
 			.replace("{{faqLink}}", `${process.env.APP_URL}/faq`);
 
-		await sendEmail({
+		sendEmail({
 			to: user.email,
 			subject: "Welcome to The Lenovo Go Pro Program",
 			html: htmlTemplate,
+		}).catch(err => {
+			console.error('Email failed:', err);
 		});
 
 		res.status(200).json({ message: "Email confirmed successfully" });

@@ -20,19 +20,15 @@ interface EmailOptions {
 }
 
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
-  try {
-    const mailOptions = {
-      from: `"Go Pro Lenovo Team" <${process.env.EMAIL_USER}>`, // Sender address
-      to: options.to,
-      subject: options.subject,
-      text: options.text,
-      html: options.html,
-      bcc: options.bcc
-    };
+  const mailOptions = {
+    from: `"Go Pro Lenovo Team" <${process.env.EMAIL_USER}>`,
+    to: options.to,
+    subject: options.subject,
+    text: options.text,
+    html: options.html,
+    bcc: options.bcc
+  };
 
-    await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully');
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
+  await transporter.sendMail(mailOptions);
+  console.log('Email sent successfully to:', options.to);
 };
