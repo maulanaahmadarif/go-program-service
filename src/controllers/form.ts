@@ -87,9 +87,9 @@ export const approveSubmission = async (req: any, res: Response) => {
 
     // Step 4: Check for completion bonus (only if needed)
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-12-30');
+    const targetDate = dayjs('2025-12-20');
     
-    if (currentDate.isBefore(targetDate) && (user.user_type === 'T1' || user.user_type === 'T2')) {
+    if (currentDate.isBefore(targetDate)) {
       const additionalPointCompletionPoint = 200;
       
       // Only count if user type requires completion bonus
@@ -280,6 +280,7 @@ export const formSubmission = async (req: any, res: Response) => {
 
   const userId = req.user?.userId;
   let isProjectFormCompleted = false;
+  let firstSubmissionBonus = false;
   
   try {
     const submission = await Form.create({
@@ -303,6 +304,15 @@ export const formSubmission = async (req: any, res: Response) => {
       }
     )
 
+    // Check if this is the user's first form submission
+    const totalFormCount = await Form.count({
+      where: {
+        user_id: userId,
+      },
+      transaction
+    });
+    const isFirstSubmission = totalFormCount === 0;
+
     const user = await User.findByPk(userId, { 
       transaction,
       include: [{
@@ -311,25 +321,40 @@ export const formSubmission = async (req: any, res: Response) => {
       }]
     });
 
+    // Give bonus to newly referred user when they submit their first form
+    if (isFirstSubmission && user?.referrer) {
+      const bonusPoints = 400;
+
+      // Award 400 points to the newly signed up user
+      await PointTransaction.create({
+        user_id: user.user_id,
+        points: bonusPoints,
+        transaction_type: 'earn',
+        description: `First form submission bonus for signing up with referral code`
+      }, { transaction });
+
+      user.total_points = (user.total_points || 0) + bonusPoints;
+      user.accomplishment_total_points = (user.accomplishment_total_points || 0) + bonusPoints;
+      user.lifetime_total_points = (user.lifetime_total_points || 0) + bonusPoints;
+      await user.save({ transaction });
+
+      firstSubmissionBonus = true;
+      console.log(`First submission bonus: ${bonusPoints} points awarded to user ${user.username} for first form submission`);
+    }
+
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-12-30');
+    const targetDate = dayjs('2025-12-20');
   
     if (currentDate.isBefore(targetDate, 'day')) {
-      if (user?.user_type === 'T2') {
-        if (formsCount === 5) {
-          isProjectFormCompleted = true;
-        }
-      } else if (user?.user_type === 'T1') {
-        if (formsCount === 4) {
-          isProjectFormCompleted = true;
-        }
+      if (formsCount === 4) {
+        isProjectFormCompleted = true;
       }
     }
 
     // Check for form type 4 bonus points
     if (form_type_id === 4 && user) {
       // Check if submission is within the date range: May 1, 2025 to June 20, 2025 end of day
-      const startDate = dayjs('2025-10-20T00:00:00');
+      const startDate = dayjs('2025-10-25T00:00:00');
       const cutoffDate = dayjs('2025-12-30T23:59:59');
       
       if (currentDate.isAfter(startDate) && currentDate.isBefore(cutoffDate)) {
@@ -338,7 +363,7 @@ export const formSubmission = async (req: any, res: Response) => {
             user_id: userId,
             form_type_id: 4,
             createdAt: {
-              [Op.gte]: new Date('2025-10-20T00:00:00.000Z'),
+              [Op.gte]: new Date('2025-10-25T00:00:00.000Z'),
               [Op.lte]: new Date('2025-12-30T23:59:59.999Z')
             }
           },
@@ -426,7 +451,7 @@ export const formSubmission = async (req: any, res: Response) => {
       status: res.status, 
       data: { 
         form_completed: isProjectFormCompleted,
-        first_submission_bonus: false
+        first_submission_bonus: firstSubmissionBonus
       } 
     });
   } catch (error: any) {
@@ -478,10 +503,18 @@ export const getFormByProject = async (req: any, res: Response) => {
 
 export const getFormSubmission = async (req: Request, res: Response) => {
   try {
-    const { company_id, user_id, start_date, end_date, status, user_type } = req.query;
+    const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category } = req.query;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
+
+    // Validate product_category query parameter
+    if (product_category && !['TKDN Product', 'Aura Edition'].includes(product_category as string)) {
+      return res.status(400).json({ 
+        message: 'Invalid product_category.',
+        status: 400
+      });
+    }
 
     const companyWhere: any = {};
     const userWhere: any = {};
@@ -506,6 +539,17 @@ export const getFormSubmission = async (req: Request, res: Response) => {
     }
 
     const whereClause: any = {};
+
+    // Add form_type_id filter
+    if (form_type_id) {
+      if (Array.isArray(form_type_id)) {
+        whereClause.form_type_id = {
+          [Op.in]: form_type_id.map(id => parseInt(id as string))
+        };
+      } else {
+        whereClause.form_type_id = parseInt(form_type_id as string);
+      }
+    }
 
     // Add status filter
     if (status) {
@@ -584,7 +628,7 @@ export const getFormSubmission = async (req: Request, res: Response) => {
     });
 
     // Transform forms to include points calculation
-    const transformedForms = forms.map(form => {
+    let transformedForms = forms.map(form => {
       const plainForm = form.get({ plain: true }) as any;
       let points = 0;
       let bonus_points = 0;
@@ -623,16 +667,37 @@ export const getFormSubmission = async (req: Request, res: Response) => {
       };
     });
 
+    // Filter by product_category if provided
+    if (product_category) {
+      transformedForms = transformedForms.filter(form => {
+        if (form.form_data && Array.isArray(form.form_data)) {
+          // Check if form_data contains the specified product category
+          const hasProductCategory = form.form_data.some((item: any) => {
+            if (item.value && Array.isArray(item.value)) {
+              return item.value.some((val: any) => val.productCategory === product_category);
+            }
+            return false;
+          });
+          return hasProductCategory;
+        }
+        return false;
+      });
+    }
+
+    // Adjust pagination total items based on filtered results
+    const filteredTotalItems = transformedForms.length;
+    const filteredTotalPages = Math.ceil(filteredTotalItems / limit);
+
     res.status(200).json({ 
       message: 'List of forms', 
       status: res.status, 
       data: transformedForms,
       pagination: {
-        total_items: totalCount,
-        total_pages: totalPages,
+        total_items: filteredTotalItems,
+        total_pages: filteredTotalPages,
         current_page: page,
         items_per_page: limit,
-        has_next: page < totalPages,
+        has_next: page < filteredTotalPages,
         has_previous: page > 1
       }
     });
@@ -663,7 +728,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
     if (form_type_id) {
       whereClause.form_type_id = form_type_id;
       whereClause.createdAt = {
-        [Op.gte]: new Date('2025-10-20T00:00:00.000Z'),
+        [Op.gte]: new Date('2025-10-25T00:00:00.000Z'),
         [Op.lte]: new Date('2025-12-30T23:59:59.999Z')
       };
     }
@@ -958,7 +1023,7 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
     }
 
     // Date filter: from May 1, 2025 to June 20, 2025 end of day
-    const startDate = new Date('2025-10-20T00:00:00.000Z');
+    const startDate = new Date('2025-10-25T00:00:00.000Z');
     const endDate = new Date('2025-12-30T23:59:59.999Z'); // June 20, 2025 end of day
 
     // First get all users with their form type submission counts using a subquery

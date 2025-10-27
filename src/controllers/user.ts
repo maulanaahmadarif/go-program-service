@@ -233,25 +233,6 @@ export const userSignup = async (req: Request, res: Response) => {
 				referred_by: referrerId,
 			}, { transaction });
 
-			// If user signed up with a referral code, give 400 points to the new user
-			if (referrer) {
-				const referralBonusPoints = 400;
-				
-				// Update new user's points
-				user.total_points = (user.total_points || 0) + referralBonusPoints;
-				user.accomplishment_total_points = (user.accomplishment_total_points || 0) + referralBonusPoints;
-				user.lifetime_total_points = (user.lifetime_total_points || 0) + referralBonusPoints;
-				await user.save({ transaction });
-
-				// Create point transaction record for new user
-				await PointTransaction.create({
-					user_id: user.user_id,
-					points: referralBonusPoints,
-					transaction_type: 'earn',
-					description: `Referral signup bonus for using referral code: ${referrer.referral_code}`
-				}, { transaction });
-			}
-
 			// Create verification token
 			await VerificationToken.create({
 				user_id: user.user_id,
@@ -361,7 +342,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 				user_id: user.user_id,
 				status: 'approved',
 				createdAt: {
-					[Op.gte]: new Date('2025-10-20T00:00:00.000Z')
+					[Op.gte]: new Date('2025-10-25T00:00:00.000Z')
 				}
 			}
 		});
@@ -1119,7 +1100,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
-						AND referred.created_at >= '2025-05-28T00:00:00.000Z'
+						AND referred.created_at >= '2025-10-25T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1138,7 +1119,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2025-05-28T00:00:00.000Z'
+				AND referred.created_at >= '2025-10-25T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1149,7 +1130,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2025-05-28T00:00:00.000Z'
+				AND referred.created_at >= '2025-10-25T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1194,7 +1175,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
-							AND referred.created_at >= '2025-05-28T00:00:00.000Z'
+							AND referred.created_at >= '2025-10-25T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 

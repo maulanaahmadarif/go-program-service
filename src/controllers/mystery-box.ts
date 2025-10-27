@@ -16,7 +16,7 @@ export const checkEligibility = async (req: any, res: Response) => {
 
 		// Check if current date is after September 3, 2025 (end date)
 		const currentDate = new Date();
-		const endDate = new Date('2025-09-03T23:59:59.999Z');
+		const endDate = new Date('2025-12-20T23:59:59.999Z');
 		
 		if (currentDate > endDate) {
 			return res.status(200).json({
