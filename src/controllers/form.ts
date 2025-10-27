@@ -512,7 +512,6 @@ export const getFormSubmission = async (req: Request, res: Response) => {
     const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category } = req.query;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
-    const offset = (page - 1) * limit;
 
     // Validate product_category query parameter
     if (product_category && !['TKDN Product', 'Aura Edition'].includes(product_category as string)) {
@@ -582,26 +581,7 @@ export const getFormSubmission = async (req: Request, res: Response) => {
       };
     }
 
-    // Get total count for pagination
-    const totalCount = await Form.count({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          required: true,
-          where: userWhere,
-          include: [
-            {
-              model: Company,
-              where: companyWhere,
-              required: true,
-            }
-          ]
-        }
-      ]
-    });
-    const totalPages = Math.ceil(totalCount / limit);
-
+    // Fetch all forms without pagination first (we'll paginate after filtering)
     const forms = await Form.findAll({
       include: [
         {
@@ -628,13 +608,34 @@ export const getFormSubmission = async (req: Request, res: Response) => {
         }
       ],
       where: whereClause,
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset
+      order: [['createdAt', 'DESC']]
     });
 
+    // Pre-calculate completion bonuses for all users/projects to avoid repeated queries
+    const currentDate = dayjs();
+    const targetDate = dayjs('2025-12-20');
+    const completionBonusMap = new Map<string, boolean>();
+    
+    if (currentDate.isBefore(targetDate)) {
+      // Get all user-project combinations that have exactly 4 approved submissions
+      const approvedForms = await Form.findAll({
+        where: {
+          status: 'approved'
+        },
+        attributes: ['user_id', 'project_id'],
+        group: ['user_id', 'project_id', 'Form.user_id', 'Form.project_id'],
+        having: sequelize.literal('COUNT(*) = 4')
+      });
+
+      // Store which user-project combinations should get completion bonus
+      approvedForms.forEach(form => {
+        const key = `${form.user_id}-${form.project_id}`;
+        completionBonusMap.set(key, true);
+      });
+    }
+
     // Transform forms to include points calculation
-    let transformedForms = await Promise.all(forms.map(async form => {
+    let transformedForms = forms.map(form => {
       const plainForm = form.get({ plain: true }) as any;
       let points = 0;
       let bonus_points = 0;
@@ -665,22 +666,10 @@ export const getFormSubmission = async (req: Request, res: Response) => {
         // Calculate bonus points using utility function
         bonus_points = calculateBonusPoints(plainForm.form_type.form_type_id, product_quantity, isAuraEdition);
 
-        // Calculate completion bonus
-        const currentDate = dayjs();
-        const targetDate = dayjs('2025-12-20');
-        
-        if (currentDate.isBefore(targetDate)) {
-          const approvedSubmissionsCount = await Form.count({
-            where: {
-              user_id: plainForm.user_id,
-              project_id: plainForm.project_id,
-              status: 'approved'
-            }
-          });
-
-          if (approvedSubmissionsCount === 4) {
-            completion_bonus = 200;
-          }
+        // Check completion bonus from pre-calculated map
+        const key = `${plainForm.user_id}-${plainForm.project_id}`;
+        if (completionBonusMap.has(key)) {
+          completion_bonus = 200;
         }
       }
 
@@ -691,7 +680,7 @@ export const getFormSubmission = async (req: Request, res: Response) => {
         completion_bonus: completion_bonus,
         total_points: points + bonus_points + completion_bonus
       };
-    }));
+    });
 
     // Filter by product_category if provided
     if (product_category) {
@@ -710,20 +699,24 @@ export const getFormSubmission = async (req: Request, res: Response) => {
       });
     }
 
-    // Adjust pagination total items based on filtered results
-    const filteredTotalItems = transformedForms.length;
-    const filteredTotalPages = Math.ceil(filteredTotalItems / limit);
+    // Calculate pagination on the filtered results
+    const totalItems = transformedForms.length;
+    const totalPages = Math.ceil(totalItems / limit);
+    const offset = (page - 1) * limit;
+    
+    // Apply pagination to the filtered and transformed results
+    const paginatedForms = transformedForms.slice(offset, offset + limit);
 
     res.status(200).json({ 
       message: 'List of forms', 
       status: res.status, 
-      data: transformedForms,
+      data: paginatedForms,
       pagination: {
-        total_items: filteredTotalItems,
-        total_pages: filteredTotalPages,
+        total_items: totalItems,
+        total_pages: totalPages,
         current_page: page,
         items_per_page: limit,
-        has_next: page < filteredTotalPages,
+        has_next: page < totalPages,
         has_previous: page > 1
       }
     });
