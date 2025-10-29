@@ -5,62 +5,166 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Redemption Details</title>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
-      margin: 20px;
-      padding: 20px;
-      background-color: #f9f9f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: #333;
+      padding: 40px 20px;
+      line-height: 1.6;
     }
     .container {
-      background-color: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
-    h1 {
-      color: #0056b3;
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px 30px;
+      text-align: center;
+    }
+    .header h1 {
+      color: #ffffff;
+      font-size: 32px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      padding: 40px 30px;
+      font-size: 16px;
+      color: #444;
+    }
+    .intro {
+      margin-bottom: 30px;
+      color: #555;
+    }
+    .section-title {
+      color: #667eea;
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e9ecef;
     }
     .details, .score {
-      margin-bottom: 20px;
+      margin-bottom: 30px;
     }
-    .details p, .score p {
-      margin: 5px 0;
+    .detail-row, .score-row {
+      padding: 12px 0;
+      border-bottom: 1px solid #f1f3f5;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-row strong, .score-row strong {
+      color: #667eea;
+      font-weight: 600;
+      display: inline-block;
+      min-width: 160px;
+    }
+    .details-box {
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 15px 0;
+      border-left: 5px solid #667eea;
+    }
+    .score-box {
+      background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 15px 0;
+      border-left: 5px solid #667eea;
+    }
+    .info-note {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      padding: 20px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #f59e0b;
+      color: #92400e;
+    }
+    .info-note strong {
+      display: block;
+      margin-bottom: 5px;
     }
     .footer {
-      margin-top: 20px;
-      font-size: 0.9em;
-      color: #666;
+      background-color: #f8f9fa;
+      text-align: center;
+      padding: 30px;
+      border-top: 2px solid #e9ecef;
+      color: #777;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Hi Partners!</h1>
-    <p>Thank you for joining the Lenovo Go Pro Program. We hope you find it enjoyable and motivating for your journey.</p>
-    
-    <div class="details">
-      <h2>Here is your redemption details:</h2>
-      <p><strong>Date:</strong> {{redemptionDate}}</p>
-      <p><strong>Redemption Item:</strong> {{redemptionItem}}</p>
-      <p><strong>Full Name:</strong> {{partnerName}}</p>
-      <p><strong>Email:</strong> {{email}}</p>
-      <p><strong>Phone Number:</strong> {{phoneNumber}}</p>
-      <p><strong>Shipping Address:</strong> {{address}}</p>
-      <p><strong>Postal Code:</strong> {{postalCode}}</p>
+    <div class="header">
+      <div class="emoji">🎁</div>
+      <h1>Hi Partners!</h1>
     </div>
-    
-    <div class="score">
-      <h2>Score Calculation:</h2>
-      <p><strong>Accomplishment Score:</strong> {{accomplishmentScore}}</p>
-      <p><strong>Current Score:</strong> {{currentScore}}</p>
+    <div class="content">
+      <p class="intro">Thank you for joining the Lenovo Go Pro Program. We hope you find it enjoyable and motivating for your journey.</p>
+      
+      <div class="details">
+        <h2 class="section-title">📦 Here is your redemption details:</h2>
+        <div class="details-box">
+          <div class="detail-row">
+            <strong>📅 Date:</strong> {{redemptionDate}}
+          </div>
+          <div class="detail-row">
+            <strong>🎁 Redemption Item:</strong> {{redemptionItem}}
+          </div>
+          <div class="detail-row">
+            <strong>👤 Full Name:</strong> {{partnerName}}
+          </div>
+          <div class="detail-row">
+            <strong>📧 Email:</strong> {{email}}
+          </div>
+          <div class="detail-row">
+            <strong>📱 Phone Number:</strong> {{phoneNumber}}
+          </div>
+          <div class="detail-row">
+            <strong>📍 Shipping Address:</strong> {{address}}
+          </div>
+          <div class="detail-row">
+            <strong>📮 Postal Code:</strong> {{postalCode}}
+          </div>
+        </div>
+      </div>
+      
+      <div class="score">
+        <h2 class="section-title">🏆 Score Calculation:</h2>
+        <div class="score-box">
+          <div class="score-row">
+            <strong>⭐ Accomplishment Score:</strong> {{accomplishmentScore}}
+          </div>
+          <div class="score-row">
+            <strong>💯 Current Score:</strong> {{currentScore}}
+          </div>
+        </div>
+      </div>
+      
+      <div class="info-note">
+        <p><strong>⏰ Processing Time</strong></p>
+        <p>Please wait for 3-5 working days for shipping management. Thank you!</p>
+      </div>
     </div>
-    
-    <p>Please wait for 3-5 working days for shipping management. Thank you!</p>
-    
     <div class="footer">
-      <p>Lenovo Go Pro Program Team</p>
+      <p><strong>Lenovo Go Pro Program Team</strong></p>
     </div>
   </div>
 </body>

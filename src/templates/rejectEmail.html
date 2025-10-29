@@ -5,93 +5,207 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Form Rejection Notification</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f7fc;
-      color: #333;
+    * {
       margin: 0;
-      padding: 20px;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      color: #333;
+      padding: 40px 20px;
+      line-height: 1.6;
     }
     .container {
       max-width: 600px;
       margin: 0 auto;
       background-color: #ffffff;
-      border-radius: 8px;
-      padding: 30px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
     .header {
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      color: white;
       text-align: center;
-      margin-bottom: 20px;
+      padding: 40px 30px;
     }
     .header h2 {
-      color: #ff4d4f;
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
     }
     .content {
       font-size: 16px;
       line-height: 1.6;
+      padding: 40px 30px;
+      color: #444;
     }
     .highlight {
-      font-weight: bold;
-      color: #ff4d4f;
+      font-weight: 600;
+      color: #dc2626;
+    }
+    .intro {
+      margin-bottom: 20px;
+      color: #555;
+    }
+    .alert-box {
+      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #dc2626;
+      color: #991b1b;
+    }
+    .section-title {
+      color: #dc2626;
+      font-weight: 600;
+      font-size: 18px;
+      margin: 25px 0 15px 0;
+    }
+    .info-list {
+      background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+      padding: 20px 25px 20px 40px;
+      border-radius: 8px;
+      margin: 15px 0;
+      border-left: 4px solid #dc2626;
+    }
+    .info-list li {
+      margin: 8px 0;
+      color: #444;
+    }
+    .rejection-details {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #f59e0b;
+      color: #92400e;
+    }
+    .rejection-details ul {
+      margin: 10px 0;
+    }
+    .rejection-details li {
+      margin: 8px 0;
+    }
+    .suggestions {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #0ea5e9;
+      color: #0c4a6e;
+    }
+    .suggestions ul {
+      margin: 10px 0;
+    }
+    .suggestions li {
+      margin: 8px 0;
+    }
+    .encouragement {
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #10b981;
+      color: #065f46;
+    }
+    .contact-info {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 4px solid #667eea;
+    }
+    .contact-info a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .contact-info a:hover {
+      text-decoration: underline;
+    }
+    .signature {
+      margin-top: 30px;
+      color: #666;
+      padding-top: 20px;
+      border-top: 2px solid #e9ecef;
     }
     .footer {
+      background-color: #f8f9fa;
       text-align: center;
-      margin-top: 30px;
-      font-size: 12px;
+      padding: 30px;
+      border-top: 2px solid #e9ecef;
       color: #777;
-    }
-    .footer a {
-      color: #007bff;
-      text-decoration: none;
-    }
-    .footer a:hover {
-      text-decoration: underline;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-
   <div class="container">
     <div class="header">
+      <div class="emoji">❌</div>
       <h2>Form Submission Rejected</h2>
     </div>
 
     <div class="content">
-      <p>Hi <span class="highlight">{{username}}</span>,</p>
+      <p class="intro">Hi <span class="highlight">{{username}}</span>,</p>
+      
+      <div class="alert-box">
+        <p><strong>⚠️ Important Notice</strong></p>
+        <p>Unfortunately, your submission is rejected. Every point you've earned from this submission will be removed.</p>
+      </div>
+
       <p>Thank you for your effort on the milestone submission.</p>
-      <p>Unfortunately, your submission is rejected. Every point you've earned from this submission will be removed.</p>
-      <p>Why was your submission rejected? </p>
-      <ul>
+
+      <p class="section-title">Why was your submission rejected?</p>
+      <ul class="info-list">
         <li>The details you provided do not align with the supporting document.</li>
-        <li>The quality of the document does not meet the standards required for verification. </li>
-      </ul>
-      <p>In this case, your submission is rejected due to:</p>
-      <ul>
-        <li>Project: {{project}}</li>
-        <li>Milestone: {{milestone}}</li>
-        <li>Reason: {{reason}}</li>
-      </ul>
-      <p>We suggest you to: </p>
-      <ul>
-        <li>Double-check all details in your submission, including names, dates, amounts, and any specific information. </li>
-        <li>Provide clear and legible documents and be sure to use widely accepted formats, such as JPG or PDF.</li>
+        <li>The quality of the document does not meet the standards required for verification.</li>
       </ul>
 
-      <p>However, you are welcome to re-submit your milestone on the Lenovo Go Pro Program. Once your milestone submission is approved, your points will be reissued.</p>
-      <p>
-        If you have any questions, feel free to contact us at <a href="tel:+6282225329590">+62 822-2532-9590</a> or email us at <a href="mailto:gopro-lenovo.team@fokustarget.com">gopro-lenovo.team@fokustarget.com</a>
-      </p>
+      <div class="rejection-details">
+        <p><strong>❌ In this case, your submission is rejected due to:</strong></p>
+        <ul>
+          <li><strong>Project:</strong> {{project}}</li>
+          <li><strong>Milestone:</strong> {{milestone}}</li>
+          <li><strong>Reason:</strong> {{reason}}</li>
+        </ul>
+      </div>
 
-      <p>
-        Good luck and cheers, Lenovo Go Pro Team
+      <div class="suggestions">
+        <p><strong>💡 We suggest you to:</strong></p>
+        <ul>
+          <li>Double-check all details in your submission, including names, dates, amounts, and any specific information.</li>
+          <li>Provide clear and legible documents and be sure to use widely accepted formats, such as JPG or PDF.</li>
+        </ul>
+      </div>
+
+      <div class="encouragement">
+        <p><strong>🔄 Re-submission Welcome</strong></p>
+        <p>However, you are welcome to re-submit your milestone on the Lenovo Go Pro Program. Once your milestone submission is approved, your points will be reissued.</p>
+      </div>
+
+      <div class="contact-info">
+        <p><strong>📞 Need Help?</strong></p>
+        <p>If you have any questions, feel free to contact us at <a href="tel:+6282225329590">+62 822-2532-9590</a> or email us at <a href="mailto:gopro-lenovo.team@fokustarget.com">gopro-lenovo.team@fokustarget.com</a></p>
+      </div>
+
+      <p class="signature">
+        Good luck and cheers, <strong>Lenovo Go Pro Team</strong>
       </p>
     </div>
 
     <div class="footer">
-      <p>Best regards, <br> Lenovo Go Pro Program Team</p>
+      <p><strong>Best regards</strong></p>
+      <p>Lenovo Go Pro Program Team</p>
     </div>
   </div>
-
 </body>
 </html>

@@ -3,54 +3,126 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redemption Details</title>
+  <title>Redemption Rejection</title>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
-      margin: 20px;
-      padding: 20px;
-      background-color: #f9f9f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
       color: #333;
+      padding: 40px 20px;
+      line-height: 1.6;
     }
     .container {
-      background-color: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
-    h1 {
-      color: #0056b3;
+    .header {
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      color: white;
+      padding: 40px 30px;
+      text-align: center;
     }
-    .details, .score {
+    .header h1 {
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      padding: 40px 30px;
+      font-size: 16px;
+      color: #444;
+    }
+    .greeting {
+      font-size: 18px;
+      font-weight: 600;
+      color: #dc2626;
       margin-bottom: 20px;
     }
-    .details p, .score p {
-      margin: 5px 0;
+    .alert-box {
+      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #dc2626;
+      color: #991b1b;
+    }
+    .alert-box strong {
+      font-size: 18px;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .message {
+      margin: 20px 0;
+      color: #555;
+    }
+    .appreciation {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #0ea5e9;
+      color: #0c4a6e;
+    }
+    .signature {
+      margin-top: 30px;
+      color: #666;
+      padding-top: 20px;
+      border-top: 2px solid #e9ecef;
     }
     .footer {
-      margin-top: 20px;
-      font-size: 0.9em;
-      color: #666;
+      background-color: #f8f9fa;
+      text-align: center;
+      padding: 30px;
+      border-top: 2px solid #e9ecef;
+      color: #777;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h6>Dear {{username}}</h6>
-    <p><strong>Your redemption is rejected at this moment.</strong></p>
-    
-    <p>
-      Thank you for your recent redemption!<br/>
-      We regret to inform you that your redemption cannot be processed at this time. Our team is currently validating the milestone you've submitted recently. We kindly ask for your patience as we complete this process.<br/>
-    </p>
+    <div class="header">
+      <div class="emoji">⚠️</div>
+      <h1>Redemption Update</h1>
+    </div>
+    <div class="content">
+      <p class="greeting">Dear {{username}}</p>
+      
+      <div class="alert-box">
+        <strong>Your redemption is rejected at this moment.</strong>
+      </div>
+      
+      <p class="message">
+        Thank you for your recent redemption!<br/>
+        We regret to inform you that your redemption cannot be processed at this time. Our team is currently validating the milestone you've submitted recently. We kindly ask for your patience as we complete this process.
+      </p>
 
-    <p>
-      We truly appreciate your enthusiasm in claiming your reward. We'll update you immediately, thus, you won't miss your chance to redeem the rewards.
-    </p>
-    
-    <p>Thank you for your understanding.</p>
-    
+      <div class="appreciation">
+        <p><strong>💝 We truly appreciate your enthusiasm!</strong></p>
+        <p>We'll update you immediately, thus, you won't miss your chance to redeem the rewards.</p>
+      </div>
+      
+      <p class="message">Thank you for your understanding.</p>
+      
+      <div class="signature">
+        <p>Sincerely,<br/>
+        <strong>Lenovo Go Pro Program Team</strong></p>
+      </div>
+    </div>
     <div class="footer">
       <p>Lenovo Go Pro Program Team</p>
     </div>

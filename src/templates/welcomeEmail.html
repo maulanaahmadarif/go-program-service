@@ -4,38 +4,199 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to Lenovo Go Pro Program</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px 30px;
+      text-align: center;
+    }
+    .header h2 {
+      color: #ffffff;
+      font-size: 32px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      padding: 40px 30px;
+      font-size: 16px;
+      color: #444;
+    }
+    .intro {
+      margin-bottom: 30px;
+    }
+    .intro p {
+      margin: 15px 0;
+      color: #555;
+    }
+    .intro strong {
+      color: #667eea;
+      font-weight: 600;
+    }
+    .section-title {
+      color: #667eea;
+      font-size: 24px;
+      font-weight: 600;
+      margin: 30px 0 20px 0;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e9ecef;
+    }
+    .steps-list {
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      padding: 30px 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #667eea;
+    }
+    .steps-list li {
+      margin: 20px 0;
+      padding-left: 10px;
+      color: #444;
+      list-style: none;
+    }
+    .step-title {
+      color: #667eea;
+      font-weight: 600;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .step-description {
+      margin-left: 20px;
+      color: #666;
+    }
+    .cta-section {
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      padding: 30px;
+      border-radius: 8px;
+      margin: 30px 0;
+      border-left: 5px solid #10b981;
+      text-align: center;
+    }
+    .cta-section p {
+      margin: 15px 0;
+      color: #065f46;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      text-decoration: none;
+      padding: 16px 40px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin: 15px 0;
+    }
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+    .faq-link {
+      text-align: center;
+      margin: 25px 0;
+      color: #667eea;
+    }
+    .faq-link a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .faq-link a:hover {
+      text-decoration: underline;
+    }
+    .signature {
+      margin-top: 30px;
+      padding-top: 25px;
+      border-top: 2px solid #e9ecef;
+      color: #666;
+    }
+    .signature strong {
+      color: #667eea;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      text-align: center;
+      padding: 30px;
+      border-top: 2px solid #e9ecef;
+      color: #777;
+      font-size: 14px;
+    }
+  </style>
 </head>
-<body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6; margin: 0; padding: 20px; background-color: #ffffff;">
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">🎉</div>
+      <h2>Hi Partners!</h2>
+    </div>
 
-  <h2 style="color: #333333;">Hi Partners!</h2>
+    <div class="content">
+      <div class="intro">
+        <p>Congratulations, you are now part of the <strong>Lenovo Go Pro Program!</strong></p>
+        <p>You can now log in to your account using the registered email.</p>
+      </div>
 
-  <p>Congratulations, you are now part of the <strong>Lenovo Go Pro Program!</strong></p>
-  <p>You can now log in to your account using the registered email.</p>
+      <h3 class="section-title">What's next?</h3>
 
-  <h3 style="color: #333333; margin-top: 20px;">What’s next?</h3>
+      <ul class="steps-list">
+        <li>
+          <div class="step-title">🚀 Start Your Journey</div>
+          <div class="step-description">Connect with customers and partners to offer Lenovo devices with Microsoft Windows 11 Pro.</div>
+        </li>
+        <li>
+          <div class="step-title">⭐ Collect More Points</div>
+          <div class="step-description">Earn points by completing each milestone on your dashboard.</div>
+        </li>
+        <li>
+          <div class="step-title">🎁 Redeem Rewards</div>
+          <div class="step-description">Claim exclusive merchandise using your points.</div>
+        </li>
+      </ul>
 
-  <ul style="list-style-type: disc; margin-left: 20px; color: #333333;">
-    <li>
-      <strong>Start Your Journey</strong><br>
-      <span style="margin-left: 20px;">Connect with customers and partners to offer Lenovo devices with Microsoft Windows 11 Pro.</span>
-    </li>
-    <li>
-      <strong>Collect More Points</strong><br>
-      <span style="margin-left: 20px;">Earn points by completing each milestone on your dashboard.</span>
-    </li>
-    <li>
-      <strong>Redeem Rewards</strong><br>
-      <span style="margin-left: 20px;">Claim exclusive merchandise using your points.</span>
-    </li>
-  </ul>
+      <div class="cta-section">
+        <p><strong>Are you ready?</strong></p>
+        <a href="{{homePageLink}}" class="cta-button">Start your journey here</a>
+      </div>
 
-  <p><strong>Are you ready?</strong></p>
-  <p><a href="{{homePageLink}}" style="color: #0066cc; text-decoration: none;">Start your journey here</a></p>
+      <p class="faq-link">Learn more about this program on: <a href="{{faqLink}}">[FAQ]</a></p>
 
-  <p>Learn more about this program on: <a href="{{faqLink}}" style="color: #0066cc;">[FAQ]</a></p>
+      <p class="signature">
+        Good luck and cheers,<br>
+        <strong>Lenovo Go Pro Program Team</strong>
+      </p>
+    </div>
 
-  <p>Good luck and cheers,<br>
-  Lenovo Go Pro Program Team</p>
-
+    <div class="footer">
+      <p><strong>Lenovo Go Pro Program Team</strong></p>
+    </div>
+  </div>
 </body>
 </html>

@@ -5,63 +5,109 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to Lenovo Go Pro Phase 2</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
+    * {
       margin: 0;
       padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      padding: 40px 20px;
+      line-height: 1.6;
     }
     .container {
       max-width: 600px;
       margin: 0 auto;
-      padding: 20px;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
     .header {
-      background-color: #7c3aed; /* Violet color */
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       text-align: center;
-      padding: 20px;
-      border-radius: 5px 5px 0 0;
+      padding: 40px 30px;
+    }
+    .header h1 {
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
     }
     .content {
       background-color: #ffffff;
-      padding: 20px;
-      border: 1px solid #e5e7eb;
-      border-radius: 0 0 5px 5px;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 20px;
-      color: #6b7280;
-      font-size: 14px;
+      padding: 40px 30px;
     }
     .message {
-      margin: 20px 0;
+      color: #444;
+      font-size: 16px;
+    }
+    .greeting {
+      font-size: 18px;
+      font-weight: 600;
+      color: #667eea;
+      margin-bottom: 20px;
+    }
+    .voucher-info {
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      padding: 20px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #667eea;
+    }
+    .voucher-info p {
+      margin: 8px 0;
+      color: #444;
     }
     .signature {
       margin-top: 30px;
-      border-top: 1px solid #e5e7eb;
-      padding-top: 20px;
+      padding-top: 25px;
+      border-top: 2px solid #e9ecef;
+      color: #666;
+    }
+    .signature strong {
+      color: #667eea;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      text-align: center;
+      padding: 25px 30px;
+      color: #6b7280;
+      font-size: 12px;
+      border-top: 2px solid #e9ecef;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
+      <div class="emoji">☕</div>
       <h1>Welcome to Lenovo Go Pro Phase 2</h1>
     </div>
     <div class="content">
       <div class="message">
-        <p>Hello {{username}},</p>
+        <p class="greeting">Hello {{username}},</p>
         
         <p>Thank you for logging in! We're processing your Starbucks E-Voucher redemption and will update you through email in 2 days maximum.</p>
+        
+        <div class="voucher-info">
+          <p><strong>⏱️ Processing Time:</strong> 2 days maximum</p>
+          <p><strong>☕ Reward:</strong> Starbucks E-Voucher</p>
+        </div>
         
         <p>Enjoy your drinks and good luck!</p>
       </div>
       
       <div class="signature">
         <p>Sincerely,<br>
-        Lenovo Go Pro Indonesia Team</p>
+        <strong>Lenovo Go Pro Indonesia Team</strong></p>
       </div>
     </div>
     <div class="footer">

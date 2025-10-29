@@ -1,15 +1,18 @@
-import nodemailer from 'nodemailer';
-import SMTPTransport from 'nodemailer/lib/smtp-transport'
+// import nodemailer from 'nodemailer';
+// import SMTPTransport from 'nodemailer/lib/smtp-transport'
+import { Resend } from "resend";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-} as SMTPTransport.Options);
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// const transporter = nodemailer.createTransport({
+//   host: process.env.EMAIL_HOST,
+//   port: process.env.EMAIL_PORT,
+//   secure: true,
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASSWORD,
+//   },
+// } as SMTPTransport.Options);
 
 interface EmailOptions {
   to: string;
@@ -24,11 +27,14 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
     from: `"Go Pro Lenovo Team" <${process.env.EMAIL_USER}>`,
     to: options.to,
     subject: options.subject,
-    text: options.text,
+    text: options.text ?? '',
     html: options.html,
-    bcc: options.bcc
   };
 
-  await transporter.sendMail(mailOptions);
-  console.log('Email sent successfully to:', options.to);
+  // await transporter.sendMail(mailOptions);
+  const { data, error } = await resend.emails.send(mailOptions);
+  if (error) {
+    console.log('Email failed:', error);
+  }
+  console.log('Email sent successfully:', data);
 };

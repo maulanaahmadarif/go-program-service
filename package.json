@@ -31,6 +31,7 @@
     "pdf-parse": "^1.1.1",
     "pg": "^8.13.0",
     "pg-hstore": "^2.3.4",
+    "resend": "^6.3.0",
     "sequelize": "^6.37.4",
     "sequelize-typescript": "^2.1.6",
     "tesseract.js": "^4.1.1"

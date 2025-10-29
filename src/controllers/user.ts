@@ -268,7 +268,6 @@ export const userSignup = async (req: Request, res: Response) => {
 
 			sendEmail({
 				to: user.email,
-				bcc: process.env.EMAIL_BCC,
 				subject: "Email Confirmation - Lenovo Go Pro Program",
 				html: htmlTemplate,
 			}).catch(err => {
@@ -532,7 +531,6 @@ export const forgotPassword = async (req: Request, res: Response) => {
 		const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}`;
 		sendEmail({
 			to: email,
-			bcc: process.env.EMAIL_BCC,
 			subject: "Password Reset",
 			html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
 		}).catch(err => {

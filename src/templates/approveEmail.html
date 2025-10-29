@@ -5,62 +5,116 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Milestone Submission Approved</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f7fc;
-      color: #333;
+    * {
       margin: 0;
-      padding: 20px;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      padding: 40px 20px;
+      line-height: 1.6;
     }
     .container {
       max-width: 600px;
       margin: 0 auto;
       background-color: #ffffff;
-      border-radius: 8px;
-      padding: 30px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
     .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px 30px;
       text-align: center;
-      margin-bottom: 20px;
     }
     .header h2 {
-      color: #65a30d
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0;
     }
     .content {
+      padding: 40px 30px;
       font-size: 16px;
-      line-height: 1.6;
+      color: #444;
+    }
+    .greeting {
+      margin-bottom: 20px;
+      font-size: 18px;
     }
     .highlight {
-      font-weight: bold;
-      color: #65a30d;
+      font-weight: 600;
+      color: #667eea;
+    }
+    .congrats {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 25px 0;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 600;
     }
     .project-info {
-      background-color: #f8f9fa;
-      padding: 15px;
-      border-radius: 5px;
-      margin: 15px 0;
-      border-left: 4px solid #65a30d;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      border-left: 5px solid #667eea;
+    }
+    .project-info p {
+      margin: 8px 0;
+      color: #444;
+    }
+    .project-info strong {
+      color: #667eea;
+      font-weight: 600;
     }
     .aura-highlight {
-      background-color: #fff3cd;
-      padding: 15px;
-      border-radius: 5px;
-      margin: 15px 0;
-      border-left: 4px solid #ffc107;
+      background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 25px 0;
+      color: #333;
+    }
+    .aura-highlight p {
+      margin: 8px 0;
+      font-size: 15px;
+    }
+    .aura-highlight strong {
+      color: #333;
+      font-size: 16px;
+    }
+    .regular-text {
+      margin: 20px 0;
+      color: #555;
+    }
+    .signature {
+      margin-top: 30px;
+      color: #666;
+    }
+    .signature strong {
+      color: #667eea;
     }
     .footer {
+      background-color: #f8f9fa;
+      padding: 30px;
       text-align: center;
-      margin-top: 30px;
-      font-size: 12px;
+      border-top: 2px solid #e9ecef;
       color: #777;
+      font-size: 14px;
     }
-    .footer a {
-      color: #007bff;
-      text-decoration: none;
+    .footer p {
+      margin: 5px 0;
     }
-    .footer a:hover {
-      text-decoration: underline;
+    .emoji {
+      font-size: 24px;
+      margin-right: 8px;
     }
   </style>
 </head>
@@ -68,35 +122,40 @@
 
   <div class="container">
     <div class="header">
+      <div class="emoji">🎉</div>
       <h2>Milestone Submission Approved</h2>
     </div>
 
     <div class="content">
-      <p>Hi, <span class="highlight">{{username}}</span>!</p>
+      <p class="greeting">Hi, <span class="highlight">{{username}}</span>!</p>
       
-      <p><strong>Congratulations!</strong><br/>
-      Your recent milestone submission for Lenovo Go Pro has been approved!</p>
+      <div class="congrats">
+        🎉 Congratulations! 🎉
+      </div>
+      
+      <p class="regular-text">Your recent milestone submission for Lenovo Go Pro has been approved!</p>
 
       <div class="project-info">
-        <p><strong>Project Name:</strong> {{project}}<br/>
-        <strong>Milestone Approved:</strong> {{milestone}}</p>
+        <p><strong>📋 Project Name:</strong> {{project}}</p>
+        <p><strong>✅ Milestone Approved:</strong> {{milestone}}</p>
       </div>
 
-      <p>Your points have been added to your profile! Quickly track your progress in the Leaderboard.</p>
+      <p class="regular-text">Your points have been added to your profile! Quickly track your progress in the Leaderboard.</p>
 
       <div class="aura-highlight">
-        <p><strong>Don't forget!</strong><br/>
-        Submitting Lenovo Aura Edition sales will give you up to 10x points!</p>
+        <p><strong>💡 Don't forget!</strong></p>
+        <p>Submitting Lenovo Aura Edition sales will give you up to 10x points!</p>
       </div>
 
-      <p>Let's keep the momentum going and aim for the top in Lenovo Go Pro!</p>
+      <p class="regular-text">Let's keep the momentum going and aim for the top in Lenovo Go Pro!</p>
 
-      <p>Good luck,<br/>
+      <p class="signature">Good luck,<br/>
       <strong>Lenovo Go Pro Team</strong></p>
     </div>
 
     <div class="footer">
-      <p>Best regards, <br> Lenovo Go Pro Team</p>
+      <p><strong>Best regards</strong></p>
+      <p>Lenovo Go Pro Team</p>
     </div>
   </div>
 
