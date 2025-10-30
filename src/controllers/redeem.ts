@@ -652,7 +652,7 @@ export const rejectRedeem = async (req: Request, res: Response) => {
 
         htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
 
-        sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate }).catch(err => {
+        sendEmail({ to: redeemDetail.email, cc: 'gopro-lenovo.team@fokustarget.com', subject: 'Update on Your Redemption Process', html: htmlTemplate }).catch(err => {
           console.error('Email failed:', err);
         });
       } catch (emailError) {
@@ -765,7 +765,7 @@ export const approveRedeem = async (req: Request, res: Response) => {
           emailSubject = 'Lenovo Go Pro Redemption Notification';
         }
 
-        sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate }).catch(err => {
+        sendEmail({ to: redeemDetail.email, cc: 'gopro-lenovo.team@fokustarget.com', subject: emailSubject, html: htmlTemplate }).catch(err => {
           console.error('Email failed:', err);
         });
       } catch (emailError) {

@@ -10,7 +10,6 @@ const router = express.Router();
 router.post(
 	"/file",	
 	authenticate,
-	checkDomain,
 	upload.single("file"),
 	uploadFile,
 );

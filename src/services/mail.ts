@@ -17,6 +17,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 interface EmailOptions {
   to: string;
   subject: string;
+  cc?: string | string[] | undefined;
   text?: string;
   html?: string;
   bcc?: string;
@@ -26,6 +27,7 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
   const mailOptions = {
     from: `"Go Pro Lenovo Team" <${process.env.EMAIL_USER}>`,
     to: options.to,
+    cc: options.cc,
     subject: options.subject,
     text: options.text ?? '',
     html: options.html,

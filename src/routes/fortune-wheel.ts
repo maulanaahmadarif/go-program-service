@@ -6,7 +6,7 @@ import checkDomain from '../middleware/domain';
 const router = express.Router();
 
 router.get('/check-eligibility', authenticate, checkEligibility);
-router.post('/spin', authenticate, checkDomain, spinWheel);
+router.post('/spin', authenticate, spinWheel);
 router.get('/list', authenticate, getFortuneWheelList);
 
 export default router; 
