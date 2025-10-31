@@ -12,10 +12,11 @@
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-color: #764ba2;
       color: #333;
       padding: 40px 20px;
       line-height: 1.6;
+      margin: 0;
     }
     .container {
       max-width: 600px;
@@ -23,10 +24,9 @@
       background-color: #ffffff;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-color: #667eea;
       color: white;
       padding: 40px 30px;
       text-align: center;
@@ -61,19 +61,13 @@
     }
     .button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-color: #764ba2;
       color: #ffffff;
       text-decoration: none;
       padding: 16px 40px;
       border-radius: 8px;
       font-weight: 600;
       font-size: 16px;
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
     }
     .footer {
       background-color: #f8f9fa;
@@ -109,7 +103,7 @@
       <p>Click the button below to confirm your email:</p>
       
       <div class="button-container">
-        <a href="{{confirmationLink}}" class="button">Confirm Email</a>
+        <a href="{{confirmationLink}}" class="button" style="display: inline-block; background-color: #764ba2; color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-weight: 600; font-size: 16px;">Confirm Email</a>
       </div>
 
       <div class="security-note">
