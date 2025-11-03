@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import dayjs from "dayjs";
 import ExcelJS from "exceljs";
 
@@ -1286,6 +1286,256 @@ export const getCurrentUserReferrals = async (req: any, res: Response) => {
 		console.error("Error fetching referred users:", error);
 		res.status(500).json({ 
 			message: "An error occurred while fetching referred users",
+			error 
+		});
+	}
+};
+
+export const getUsersWhoUsedReferral = async (req: Request, res: Response) => {
+	try {
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 10;
+		const offset = (page - 1) * limit;
+		const { start_date, end_date, company_id, user_type } = req.query;
+
+		const whereClause: any = {
+			referred_by: {
+				[Op.ne]: null
+			}
+		};
+
+		// Optional filters
+		if (company_id) {
+			whereClause.company_id = company_id;
+		}
+
+		if (user_type) {
+			whereClause.user_type = user_type;
+		}
+
+		if (start_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.gte]: new Date(start_date as string)
+			};
+		}
+
+		if (end_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.lte]: new Date(end_date as string)
+			};
+		}
+
+		const users = await User.findAll({
+			where: whereClause,
+			attributes: [
+				'user_id',
+				'username',
+				'fullname',
+				'email',
+				'user_type',
+				'phone_number',
+				'job_title',
+				'company_id',
+				'createdAt'
+			],
+			include: [
+				{
+					model: Company,
+					attributes: ['name']
+				},
+				{
+					model: User,
+					as: 'referrer',
+					attributes: ['user_id', 'username', 'referral_code', 'user_type']
+				}
+			],
+			order: [['createdAt', 'DESC']],
+			limit,
+			offset
+		});
+
+		const totalCount = await User.count({ where: whereClause });
+		const totalPages = Math.ceil(totalCount / limit);
+
+		const transformed = users.map(u => {
+			const plain = u.get({ plain: true }) as any;
+			return {
+				user_id: plain.user_id,
+				username: plain.username,
+				fullname: plain.fullname || '-',
+				email: plain.email,
+				user_type: getUserType(plain.user_type),
+				company_name: plain.company?.name || '-',
+				referrer_username: plain.referrer?.username || '-',
+				referrer_user_type: plain.referrer?.user_type ? getUserType(plain.referrer.user_type) : '-',
+				used_referral_code: plain.referrer?.referral_code || '-',
+				joined_at: dayjs(plain.createdAt).format('DD MMM YYYY HH:mm')
+			};
+		});
+
+		res.status(200).json({
+			message: 'List of users who used referral codes',
+			data: transformed,
+			pagination: {
+				total_items: totalCount,
+				total_pages: totalPages,
+				current_page: page,
+				items_per_page: limit
+			}
+		});
+
+	} catch (error) {
+		console.error('Error fetching users who used referral:', error);
+		res.status(500).json({ message: 'An error occurred while fetching users who used referral codes', error });
+	}
+};
+
+export const getUsersWithUsedReferralCodes = async (req: Request, res: Response) => {
+	try {
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 10;
+		const offset = (page - 1) * limit;
+		const { company_id, user_type, start_date, end_date } = req.query;
+
+		const whereClause: any = {};
+
+		// Optional filters
+		if (company_id) {
+			whereClause.company_id = company_id;
+		}
+
+		if (user_type) {
+			whereClause.user_type = user_type;
+		}
+
+		if (start_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.gte]: new Date(start_date as string)
+			};
+		}
+
+		if (end_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.lte]: new Date(end_date as string)
+			};
+		}
+
+		// First, get all user_ids whose referral codes have been used (they appear in referred_by)
+		const usedReferralCodeUsers = await sequelize.query(
+			`SELECT DISTINCT referred_by FROM users WHERE referred_by IS NOT NULL`,
+			{ type: QueryTypes.SELECT }
+		) as Array<{ referred_by: number }>;
+
+		const referrerIds = usedReferralCodeUsers
+			.map((user) => user.referred_by)
+			.filter((id): id is number => id !== null && id !== undefined);
+
+		if (referrerIds.length === 0) {
+			return res.status(200).json({
+				message: 'List of users whose referral codes have been used',
+				data: [],
+				pagination: {
+					total_items: 0,
+					total_pages: 0,
+					current_page: page,
+					items_per_page: limit
+				}
+			});
+		}
+
+		// Now find users who have referral codes AND their codes have been used
+		const referrers = await User.findAll({
+			where: {
+				...whereClause,
+				user_id: {
+					[Op.in]: referrerIds
+				},
+			},
+			attributes: [
+				'user_id',
+				'username',
+				'fullname',
+				'email',
+				'user_type',
+				'phone_number',
+				'job_title',
+				'company_id',
+				'referral_code',
+				'total_points',
+				'createdAt',
+				[
+					sequelize.literal(`(
+						SELECT COUNT(*)
+						FROM users AS referred
+						WHERE referred.referred_by = "User".user_id
+					)`),
+					'total_referrals'
+				]
+			],
+			include: [
+				{
+					model: Company,
+					attributes: ['name']
+				}
+			],
+			order: [[sequelize.literal(`(
+				SELECT COUNT(*)
+				FROM users AS referred
+				WHERE referred.referred_by = "User".user_id
+			)`), 'DESC']],
+			limit,
+			offset
+		});
+
+		// Get total count for pagination
+		const totalCount = await User.count({
+			where: {
+				...whereClause,
+				user_id: {
+					[Op.in]: referrerIds
+				},
+			}
+		});
+
+		const totalPages = Math.ceil(totalCount / limit);
+
+		const transformedUsers = referrers.map(referrer => {
+			const plainReferrer = referrer.get({ plain: true }) as any;
+			return {
+				user_id: plainReferrer.user_id,
+				username: plainReferrer.username,
+				fullname: plainReferrer.fullname || '-',
+				email: plainReferrer.email,
+				user_type: getUserType(plainReferrer.user_type),
+				company_name: plainReferrer.company?.name || '-',
+				phone_number: plainReferrer.phone_number || '-',
+				job_title: plainReferrer.job_title || '-',
+				referral_code: plainReferrer.referral_code,
+				total_points: plainReferrer.total_points || 0,
+				total_referrals: parseInt(plainReferrer.total_referrals) || 0,
+				created_at: dayjs(plainReferrer.createdAt).format('DD MMM YYYY HH:mm')
+			};
+		});
+
+		res.status(200).json({
+			message: 'List of users whose referral codes have been used',
+			data: transformedUsers,
+			pagination: {
+				total_items: totalCount,
+				total_pages: totalPages,
+				current_page: page,
+				items_per_page: limit
+			}
+		});
+
+	} catch (error) {
+		console.error('Error fetching users with used referral codes:', error);
+		res.status(500).json({ 
+			message: 'An error occurred while fetching users with used referral codes', 
 			error 
 		});
 	}

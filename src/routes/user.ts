@@ -18,6 +18,8 @@ import {
   getReferredUsers,
   getReferralCodeUsers,
   getCurrentUserReferrals,
+  getUsersWhoUsedReferral,
+  getUsersWithUsedReferralCodes,
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
 import checkEmailDomain from "../middleware/emailDomain";
@@ -32,6 +34,8 @@ router.get("/list", getUserList);
 router.get("/referred", authenticate, getReferredUsers);
 router.get("/referral-codes", authenticate, getReferralCodeUsers);
 router.get("/my-referrals", authenticate, getCurrentUserReferrals);
+router.get("/referrals/used", authenticate, getUsersWhoUsedReferral);
+router.get("/referrals/referrers", authenticate, getUsersWithUsedReferralCodes);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 router.post("/update", authenticate, updateUser);

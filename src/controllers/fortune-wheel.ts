@@ -1,10 +1,13 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
 import dayjs from "dayjs";
+import ExcelJS from "exceljs";
 import { sequelize } from "../db";
 import { User } from "../../models/User";
 import { Product } from "../../models/Product";
+import { Company } from "../../models/Company";
 import { FortuneWheelSpin } from "../../models/FortuneWheelSpin";
+import { getUserType } from "../utils";
 
 export const checkEligibility = async (req: any, res: Response) => {
 	try {
@@ -242,6 +245,137 @@ export const getFortuneWheelList = async (req: Request, res: Response) => {
 			return res.status(400).json({ message: 'Validation error', errors: messages });
 		}
 
+		res.status(500).json({ message: 'Something went wrong', error });
+	}
+};
+
+export const downloadFortuneWheelList = async (req: Request, res: Response) => {
+	try {
+		const { user_id, start_date, end_date, status } = req.query;
+		const userWhere: any = {};
+
+		// Add user_id filter
+		if (user_id) {
+			userWhere.user_id = user_id;
+		}
+
+		const whereClause: any = {
+			product_id: {
+				[Op.ne]: null
+			}
+		};
+
+		// Add status filter
+		if (status) {
+			if (Array.isArray(status)) {
+				whereClause.status = {
+					[Op.in]: status
+				};
+			} else {
+				whereClause.status = status;
+			}
+		}
+
+		// Add date range filters
+		if (start_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.gte]: new Date(start_date as any),
+			};
+		}
+
+		if (end_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.lte]: new Date(end_date as any),
+			};
+		}
+
+		// Get fortune wheel spins with user, company, and product data
+		const spins = await FortuneWheelSpin.findAll({
+			where: whereClause,
+			include: [
+				{
+					model: User,
+					attributes: ['user_id', 'username', 'fullname', 'email', 'user_type', 'company_id'],
+					required: true,
+					where: userWhere,
+					include: [
+						{
+							model: Company,
+							attributes: ['name'],
+							required: false
+						}
+					]
+				},
+				{
+					model: Product,
+					attributes: ['product_id', 'name', 'points_required', 'stock_quantity', 'image_url'],
+					required: false
+				}
+			],
+			order: [['createdAt', 'DESC']]
+		});
+
+		const workbook = new ExcelJS.Workbook();
+		const worksheet = workbook.addWorksheet('fortune_wheel_spins');
+
+		worksheet.columns = [
+			{ header: 'No', key: 'no', width: 5 },
+			{ header: 'Company', key: 'company', width: 20 },
+			{ header: 'Username', key: 'username', width: 15 },
+			{ header: 'Fullname', key: 'fullname', width: 20 },
+			{ header: 'Email', key: 'email', width: 25 },
+			{ header: 'User Type', key: 'user_type', width: 12 },
+			{ header: 'Prize Name', key: 'prize_name', width: 25 },
+			{ header: 'Product Name', key: 'product_name', width: 25 },
+			{ header: 'Points Required', key: 'points_required', width: 15 },
+			{ header: 'Status', key: 'status', width: 12 },
+			{ header: 'Is Redeemed', key: 'is_redeemed', width: 12 },
+			{ header: 'Created At', key: 'created_at', width: 18 },
+			{ header: 'Updated At', key: 'updated_at', width: 18 }
+		];
+
+		// Add data to the worksheet
+		spins.forEach((spin, index) => {
+			const plainSpin = spin.get({ plain: true }) as any;
+			worksheet.addRow({
+				no: index + 1,
+				company: plainSpin.user?.company?.name || '-',
+				username: plainSpin.user?.username || '-',
+				fullname: plainSpin.user?.fullname || '-',
+				email: plainSpin.user?.email || '-',
+				user_type: plainSpin.user?.user_type ? getUserType(plainSpin.user.user_type) : '-',
+				prize_name: plainSpin.prize_name || '-',
+				product_name: plainSpin.product?.name || '-',
+				points_required: plainSpin.product?.points_required || '-',
+				status: plainSpin.status || '-',
+				is_redeemed: plainSpin.is_redeemed ? 'Yes' : 'No',
+				created_at: dayjs(plainSpin.createdAt).format('DD MMM YYYY HH:mm'),
+				updated_at: dayjs(plainSpin.updatedAt).format('DD MMM YYYY HH:mm')
+			});
+		});
+
+		// Set response headers for downloading the file
+		res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+		res.setHeader('Content-Disposition', 'attachment; filename=fortune_wheel_spins.xlsx');
+
+		// Write the Excel file to the response
+		await workbook.xlsx.write(res);
+
+		// End the response
+		res.end();
+
+	} catch (error: any) {
+		console.error('Error downloading fortune wheel list:', error);
+
+		// Handle validation errors from Sequelize
+		if (error.name === 'SequelizeValidationError') {
+			const messages = error.errors.map((err: any) => err.message);
+			return res.status(400).json({ message: 'Validation error', errors: messages });
+		}
+
+		// Handle other types of errors
 		res.status(500).json({ message: 'Something went wrong', error });
 	}
 };
