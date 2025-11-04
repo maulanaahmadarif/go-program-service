@@ -25,7 +25,10 @@ export const userLogin = async (req: Request, res: Response) => {
 	const { email, password, level = "CUSTOMER" } = req.body;
 
 	try {
-		const user = await User.findOne({ where: { email, level } });
+		// Normalize email to lowercase
+		const normalizedEmail = email?.toLowerCase().trim();
+		
+		const user = await User.findOne({ where: { email: normalizedEmail, level } });
 		if (!user) {
 			return res.status(400).json({ message: "Invalid credentials" });
 		}
@@ -157,8 +160,11 @@ export const userSignup = async (req: Request, res: Response) => {
 			referral_code,
 		} = req.body;
 
+		// Normalize email to lowercase
+		const normalizedEmail = email?.toLowerCase().trim();
+
 		// // Check if email is from fokustarget.com domain
-		// if (!email.toLowerCase().endsWith('@fokustarget.com')) {
+		// if (!normalizedEmail.toLowerCase().endsWith('@fokustarget.com')) {
 		// 	return res.status(401).json({ 
 		// 		message: 'Operation not allowed',
 		// 		status: res.status
@@ -166,7 +172,7 @@ export const userSignup = async (req: Request, res: Response) => {
 		// }
 
 		// Check if email already exists
-		const existingEmail = await User.findOne({ where: { email } });
+		const existingEmail = await User.findOne({ where: { email: normalizedEmail } });
 		if (existingEmail) {
 			return res.status(400).json({ message: "Email is already registered" });
 		}
@@ -220,7 +226,7 @@ export const userSignup = async (req: Request, res: Response) => {
 			const user = await User.create({
 				username,
 				company_id: normalize_company_id,
-				email,
+				email: normalizedEmail,
 				user_type,
 				password_hash: hashedPassword,
 				program_saled_id: "",
@@ -512,7 +518,10 @@ export const forgotPassword = async (req: Request, res: Response) => {
 	const { email } = req.body;
 
 	try {
-		const user = await User.findOne({ where: { email } });
+		// Normalize email to lowercase
+		const normalizedEmail = email?.toLowerCase().trim();
+		
+		const user = await User.findOne({ where: { email: normalizedEmail } });
 		if (!user) {
 			return res.status(404).json({ message: "User not found" });
 		}
@@ -531,7 +540,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 		// Send email
 		const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}`;
 		sendEmail({
-			to: email,
+			to: normalizedEmail,
 			cc: 'gopro-lenovo.team@fokustarget.com',
 			subject: "Password Reset",
 			html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
