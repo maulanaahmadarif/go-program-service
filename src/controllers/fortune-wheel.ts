@@ -181,7 +181,7 @@ export const getFortuneWheelList = async (req: Request, res: Response) => {
 			include: [
 				{
 					model: User,
-					attributes: ['user_id', 'username', 'fullname', 'email', 'user_type', 'company_id']
+					attributes: ['user_id', 'username', 'fullname', 'email', 'user_type', 'company_id', 'phone_number']
 				},
 				{
 					model: Product,
@@ -205,7 +205,8 @@ export const getFortuneWheelList = async (req: Request, res: Response) => {
 					fullname: plainSpin.user.fullname,
 					email: plainSpin.user.email,
 					user_type: plainSpin.user.user_type,
-					company_id: plainSpin.user.company_id
+					company_id: plainSpin.user.company_id,
+					phone_number: plainSpin.user.phone_number
 				},
 				product: plainSpin.product ? {
 					product_id: plainSpin.product.product_id,
@@ -297,7 +298,7 @@ export const downloadFortuneWheelList = async (req: Request, res: Response) => {
 			include: [
 				{
 					model: User,
-					attributes: ['user_id', 'username', 'fullname', 'email', 'user_type', 'company_id'],
+					attributes: ['user_id', 'username', 'fullname', 'email', 'user_type', 'company_id', 'phone_number'],
 					required: true,
 					where: userWhere,
 					include: [
@@ -326,6 +327,7 @@ export const downloadFortuneWheelList = async (req: Request, res: Response) => {
 			{ header: 'Username', key: 'username', width: 15 },
 			{ header: 'Fullname', key: 'fullname', width: 20 },
 			{ header: 'Email', key: 'email', width: 25 },
+			{ header: 'Phone Number', key: 'phone_number', width: 15 },
 			{ header: 'User Type', key: 'user_type', width: 12 },
 			{ header: 'Prize Name', key: 'prize_name', width: 25 },
 			{ header: 'Product Name', key: 'product_name', width: 25 },
@@ -345,6 +347,7 @@ export const downloadFortuneWheelList = async (req: Request, res: Response) => {
 				username: plainSpin.user?.username || '-',
 				fullname: plainSpin.user?.fullname || '-',
 				email: plainSpin.user?.email || '-',
+				phone_number: plainSpin.user?.phone_number || '-',
 				user_type: plainSpin.user?.user_type ? getUserType(plainSpin.user.user_type) : '-',
 				prize_name: plainSpin.prize_name || '-',
 				product_name: plainSpin.product?.name || '-',

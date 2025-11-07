@@ -401,7 +401,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 
 export const getUserList = async (req: Request, res: Response) => {
 	try {
-		const { company_id, user_type, start_date, end_date } = req.query;
+		const { company_id, user_type, start_date, end_date, leaderboard } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
 		const offset = (page - 1) * limit;
@@ -415,6 +415,13 @@ export const getUserList = async (req: Request, res: Response) => {
 
 		if (user_type) {
 			whereCondition.user_type = user_type;
+		}
+
+		// Exclude specific user IDs if leaderboard=true
+		if (leaderboard === 'true') {
+			whereCondition.user_id = {
+				[Op.notIn]: [249, 279, 280, 281, 157, 244]
+			};
 		}
 
 		// Add date range filters if provided
