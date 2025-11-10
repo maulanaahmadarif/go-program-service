@@ -420,7 +420,7 @@ export const getUserList = async (req: Request, res: Response) => {
 		// Filter by name (matches fullname)
 		if (name) {
 			const normalizedName = (name as string).trim().toLowerCase();
-			const fullnameCondition = where(fn('LOWER', col('fullname')), {
+			const fullnameCondition = where(fn('LOWER', col('User.fullname')), {
 				[Op.like]: `%${normalizedName}%`
 			});
 			whereCondition[Op.and] = [
