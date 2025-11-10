@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { Op, QueryTypes } from "sequelize";
+import { Op, QueryTypes, fn, col, where } from "sequelize";
 import dayjs from "dayjs";
 import ExcelJS from "exceljs";
 
@@ -419,8 +419,14 @@ export const getUserList = async (req: Request, res: Response) => {
 
 		// Filter by name (matches fullname)
 		if (name) {
-			const nameQuery = `%${(name as string).trim()}%`;
-			whereCondition.fullname = { [Op.like]: nameQuery };
+			const normalizedName = (name as string).trim().toLowerCase();
+			const fullnameCondition = where(fn('LOWER', col('fullname')), {
+				[Op.like]: `%${normalizedName}%`
+			});
+			whereCondition[Op.and] = [
+				...(whereCondition[Op.and] || []),
+				fullnameCondition
+			];
 		}
 
 		// Exclude specific user IDs if leaderboard=true
