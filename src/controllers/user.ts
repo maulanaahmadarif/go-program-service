@@ -401,7 +401,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 
 export const getUserList = async (req: Request, res: Response) => {
 	try {
-		const { company_id, user_type, start_date, end_date, leaderboard, name } = req.query;
+		const { company_id, user_type, start_date, end_date, leaderboard, name, all_users } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
 		const offset = (page - 1) * limit;
@@ -410,6 +410,10 @@ export const getUserList = async (req: Request, res: Response) => {
 
 		if (company_id) {
 			whereCondition.company_id = company_id;
+			delete whereCondition.is_active;
+		}
+
+		if (all_users === 'true') {
 			delete whereCondition.is_active;
 		}
 
