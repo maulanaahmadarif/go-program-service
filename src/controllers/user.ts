@@ -1424,6 +1424,154 @@ export const getUsersWhoUsedReferral = async (req: Request, res: Response) => {
 	}
 };
 
+export const downloadUsersWhoUsedReferral = async (req: Request, res: Response) => {
+	try {
+		const { start_date, end_date, company_id, user_type } = req.query;
+
+		const whereClause: any = {
+			referred_by: {
+				[Op.ne]: null
+			}
+		};
+
+		// Optional filters
+		if (company_id) {
+			whereClause.company_id = company_id;
+		}
+
+		if (user_type) {
+			whereClause.user_type = user_type;
+		}
+
+		if (start_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.gte]: new Date(start_date as string)
+			};
+		}
+
+		if (end_date) {
+			whereClause.createdAt = {
+				...(whereClause.createdAt || {}),
+				[Op.lte]: new Date(end_date as string)
+			};
+		}
+
+		// Fetch all users without pagination for export
+		const users = await User.findAll({
+			where: whereClause,
+			attributes: [
+				'user_id',
+				'username',
+				'fullname',
+				'email',
+				'user_type',
+				'phone_number',
+				'job_title',
+				'company_id',
+				'createdAt'
+			],
+			include: [
+				{
+					model: Company,
+					attributes: ['name']
+				},
+				{
+					model: User,
+					as: 'referrer',
+					attributes: ['user_id', 'username', 'referral_code', 'user_type']
+				}
+			],
+			order: [['createdAt', 'DESC']]
+		});
+
+		// Transform the data
+		const transformed = users.map(u => {
+			const plain = u.get({ plain: true }) as any;
+			return {
+				user_id: plain.user_id,
+				username: plain.username,
+				fullname: plain.fullname || '-',
+				email: plain.email,
+				user_type: getUserType(plain.user_type),
+				phone_number: plain.phone_number || '-',
+				job_title: plain.job_title || '-',
+				company_name: plain.company?.name || '-',
+				referrer_username: plain.referrer?.username || '-',
+				referrer_user_type: plain.referrer?.user_type ? getUserType(plain.referrer.user_type) : '-',
+				used_referral_code: plain.referrer?.referral_code || '-',
+				joined_at: dayjs(plain.createdAt).format('DD MMM YYYY HH:mm')
+			};
+		});
+
+		// Create a new workbook and worksheet
+		const workbook = new ExcelJS.Workbook();
+		const worksheet = workbook.addWorksheet('Users Who Used Referral');
+
+		// Define columns
+		worksheet.columns = [
+			{ header: 'No', key: 'no', width: 5 },
+			{ header: 'User ID', key: 'user_id', width: 10 },
+			{ header: 'Username', key: 'username', width: 15 },
+			{ header: 'Fullname', key: 'fullname', width: 20 },
+			{ header: 'Email', key: 'email', width: 25 },
+			{ header: 'User Type', key: 'user_type', width: 12 },
+			{ header: 'Phone Number', key: 'phone_number', width: 15 },
+			{ header: 'Job Title', key: 'job_title', width: 20 },
+			{ header: 'Company Name', key: 'company_name', width: 20 },
+			{ header: 'Referrer Username', key: 'referrer_username', width: 18 },
+			{ header: 'Referrer User Type', key: 'referrer_user_type', width: 15 },
+			{ header: 'Used Referral Code', key: 'used_referral_code', width: 18 },
+			{ header: 'Joined At', key: 'joined_at', width: 20 }
+		];
+
+		// Add data to worksheet
+		transformed.forEach((user, index) => {
+			worksheet.addRow({
+				no: index + 1,
+				user_id: user.user_id,
+				username: user.username,
+				fullname: user.fullname,
+				email: user.email,
+				user_type: user.user_type,
+				phone_number: user.phone_number,
+				job_title: user.job_title,
+				company_name: user.company_name,
+				referrer_username: user.referrer_username,
+				referrer_user_type: user.referrer_user_type,
+				used_referral_code: user.used_referral_code,
+				joined_at: user.joined_at
+			});
+		});
+
+		// Style the header row
+		worksheet.getRow(1).font = { bold: true };
+		worksheet.getRow(1).alignment = {
+			vertical: 'middle',
+			horizontal: 'center'
+		};
+
+		// Set response headers
+		res.setHeader(
+			'Content-Type',
+			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+		);
+		res.setHeader('Content-Disposition', 'attachment; filename=users_who_used_referral.xlsx');
+
+		// Write to response
+		await workbook.xlsx.write(res);
+		res.end();
+
+	} catch (error: any) {
+		console.error('Error downloading users who used referral:', error);
+		if (error.name === 'SequelizeValidationError') {
+			const messages = error.errors.map((err: any) => err.message);
+			return res.status(400).json({ message: 'Validation error', errors: messages });
+		}
+		res.status(500).json({ message: 'Something went wrong', error });
+	}
+};
+
 export const getUsersWithUsedReferralCodes = async (req: Request, res: Response) => {
 	try {
 		const page = parseInt(req.query.page as string) || 1;
