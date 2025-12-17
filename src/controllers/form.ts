@@ -14,7 +14,7 @@ import { sequelize } from '../db';
 import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
 import { Project } from '../../models/Project';
-import { sendEmail } from '../services/mail';
+import { sendEmail } from '../services/brevo';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/points';
 import { PointTransaction } from '../../models/PointTransaction';

@@ -11,7 +11,7 @@ import ExcelJS from "exceljs";
 import { User } from "../../models/User";
 import { RefreshToken } from "../../models/RefreshToken";
 import { Company } from "../../models/Company";
-import { sendEmail } from "../services/mail";
+import { sendEmail } from "../services/brevo";
 import { getUserType } from "../utils";
 import { generateTokens } from "./auth";
 import { VerificationToken } from "../../models/VerificationToken";

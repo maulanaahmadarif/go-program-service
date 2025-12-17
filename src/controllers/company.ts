@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs'
 import { Company } from '../../models/Company';
 import { sequelize } from '../db';
 import { User } from '../../models/User';
-import { sendEmail } from '../services/mail';
+import { sendEmail } from '../services/brevo';
 import dayjs from 'dayjs';
 import { RefreshToken } from '../../models/RefreshToken';
 import { VerificationToken } from '../../models/VerificationToken';

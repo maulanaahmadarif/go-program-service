@@ -9,7 +9,7 @@ import { Redemption } from '../../models/Redemption';
 import { User } from '../../models/User';
 import { UserAction } from '../../models/UserAction';
 import { sequelize } from '../db';
-import { sendEmail } from '../services/mail';
+import { sendEmail } from '../services/brevo';
 import { Product } from '../../models/Product';
 import { PointTransaction } from '../../models/PointTransaction';
 import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
