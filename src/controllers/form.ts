@@ -157,7 +157,7 @@ export const approveSubmission = async (req: any, res: Response) => {
           .replace('{{project}}', project.name)
           .replace('{{milestone}}', formType.form_name);
 
-        sendEmail({ to: user.email, cc: 'gopro-lenovo.team@fokustarget.com', subject: 'Your Milestone Submission is Approved!', html: htmlTemplate }).catch(err => {
+        sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate }).catch(err => {
           console.error('Email failed:', err);
         });
       } catch (emailError) {
@@ -229,7 +229,7 @@ export const deleteForm = async (req: Request, res: Response) => {
           .replace('{{milestone}}', formType!.form_name)
           .replace('{{reason}}', reason)
 
-        sendEmail({ to: user!.email, cc: 'gopro-lenovo.team@fokustarget.com', subject: 'Your Submission is Rejected!', html: htmlTemplate }).catch(err => {
+        sendEmail({ to: user!.email, subject: 'Your Submission is Rejected!', html: htmlTemplate }).catch(err => {
           console.error('Email failed:', err);
         });
 
