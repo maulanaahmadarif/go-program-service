@@ -1,58 +1,80 @@
-type JsonValue = string | Array<Record<string, string>>;
+type JsonPrimitive = string | number | boolean | null;
+type JsonObject = Record<string, any>;
+type JsonValue = JsonPrimitive | Array<JsonObject> | JsonObject;
 interface JsonItem {
   label: string;
   value: JsonValue;
 }
 
 export function formatJsonToLabelValueString(json: JsonItem[]): string {
-  let result = "";
+  if (!Array.isArray(json) || json.length === 0) return "";
 
-  // Find company and job entries
-  const companyEntry = json.find(item => item.label.toLowerCase() === 'company');
-  const jobEntry = json.find(item => item.label.toLowerCase() === 'job');
-  const productsEntry = json.find(item => item.label.toLowerCase() === 'products');
+  const lines: string[] = [];
 
-  // Add company and job
-  if (companyEntry && typeof companyEntry.value === 'string') {
-    result += `Company: ${companyEntry.value}\n`;
-  }
-  if (jobEntry && typeof jobEntry.value === 'string') {
-    result += `Job: ${jobEntry.value}\n`;
-  }
+  const productsEntry = json.find(
+    (item) => item.label?.toLowerCase() === "products",
+  );
 
-  // Add a blank line before product section
-  result += '\n';
+  // 1) Print non-product fields first (company, job, invoiceDate, invoiceNumber, etc.)
+  json.forEach((item) => {
+    const label = item.label?.toLowerCase();
+    if (!label || label === "products") return;
 
-  // Add Product section if products exist
+    const prettyLabel = mapLabelToDifferentLabel(item.label);
+    const value = item.value as any;
+
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      lines.push(`${prettyLabel}: ${value}`);
+    } else if (value === null || value === undefined) {
+      // skip empty
+    } else {
+      // fallback for unexpected objects
+      try {
+        lines.push(`${prettyLabel}: ${JSON.stringify(value)}`);
+      } catch {
+        lines.push(`${prettyLabel}: [object]`);
+      }
+    }
+  });
+
+  // spacer line before products
+  lines.push("");
+
+  // 2) Print products (supports multiple items and full schema)
   if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
-    result += 'Product:\n';
-    const productData = productsEntry.value[0]; // Get the first product
+    lines.push("Products:");
 
-    // Add product details in specific order
-    if (productData.productCategory) {
-      result += `Product Category: ${productData.productCategory}\n`;
-    }
-    if (productData.productType) {
-      result += `Product Type: ${productData.productType}\n`;
-    }
-    if (productData.numberOfQuantity) {
-      result += `Quantity: ${productData.numberOfQuantity}\n`;
-    }
-    if (productData.document) {
-      result += `Document: ${productData.document}\n`;
-    }
-    if (productData.excelDocument) {
-      result += `Excel Document: ${productData.excelDocument}\n`;
-    }
-    if (productData.description) {
-      result += `Product Description: ${productData.description}\n`;
-    }
-    if (productData.partNumber) {
-      result += `Product Part Number: ${productData.partNumber}\n`;
-    }
+    const productKeysInOrder = [
+      "productCategory",
+      "productType",
+      "numberOfQuantity",
+      "partNumber",
+      "description",
+      "document",
+      "excelDocument",
+    ];
+
+    (productsEntry.value as JsonObject[]).forEach((product, idx) => {
+      lines.push(`- Product ${idx + 1}`);
+
+      // Known keys in a fixed order
+      productKeysInOrder.forEach((key) => {
+        const v = (product as any)?.[key];
+        if (v === undefined || v === null || v === "") return;
+        lines.push(`  ${mapLabelToDifferentLabel(key)}: ${v}`);
+      });
+
+      // Any extra keys not in the known list
+      Object.keys(product || {}).forEach((key) => {
+        if (productKeysInOrder.includes(key)) return;
+        const v = (product as any)?.[key];
+        if (v === undefined || v === null || v === "") return;
+        lines.push(`  ${mapLabelToDifferentLabel(key)}: ${v}`);
+      });
+    });
   }
 
-  return result.trim();
+  return lines.join("\n").trim();
 }
 
 export function getUserType(type: string): string {
@@ -90,6 +112,8 @@ const labelMap: LabelMapping = {
   total_accomplishment_point: 'Total Accomplishment Point',
   total_company_point: 'Total Company Point',
   total_form_submission: 'Total Form Submission',
+  partNumber: 'Part Number',
+  description: 'Description',
   // Add other mappings as needed
 };
 

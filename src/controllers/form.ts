@@ -798,7 +798,25 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
 
 export const downloadSubmission = async (req: Request, res: Response) => {
   try {
-    const { company_id, user_id, start_date, end_date } = req.query;
+    const {
+      company_id,
+      user_id,
+      start_date,
+      end_date,
+      status,
+      user_type,
+      form_type_id,
+      product_category,
+    } = req.query;
+
+    // Validate product_category query parameter (same as getFormSubmission)
+    if (product_category && !['TKDN Product', 'Aura Edition'].includes(product_category as string)) {
+      return res.status(400).json({
+        message: 'Invalid product_category.',
+        status: 400
+      });
+    }
+
     const companyWhere: any = {};
     const userWhere: any = {};
 
@@ -810,7 +828,40 @@ export const downloadSubmission = async (req: Request, res: Response) => {
       userWhere.user_id = user_id;
     }
 
+    // Add user_type filter (same as getFormSubmission)
+    if (user_type) {
+      if (Array.isArray(user_type)) {
+        userWhere.user_type = {
+          [Op.in]: user_type
+        };
+      } else {
+        userWhere.user_type = user_type;
+      }
+    }
+
     const whereClause: any = {};
+
+    // Add form_type_id filter (same as getFormSubmission)
+    if (form_type_id) {
+      if (Array.isArray(form_type_id)) {
+        whereClause.form_type_id = {
+          [Op.in]: form_type_id.map(id => parseInt(id as string))
+        };
+      } else {
+        whereClause.form_type_id = parseInt(form_type_id as string);
+      }
+    }
+
+    // Add status filter (same as getFormSubmission)
+    if (status) {
+      if (Array.isArray(status)) {
+        whereClause.status = {
+          [Op.in]: status
+        };
+      } else {
+        whereClause.status = status;
+      }
+    }
   
     if (start_date) {
       whereClause.createdAt = {
@@ -826,7 +877,7 @@ export const downloadSubmission = async (req: Request, res: Response) => {
       };
     }
 
-    const forms = await Form.findAll({
+    let forms = await Form.findAll({
       include: [
         {
           model: User,
@@ -854,6 +905,20 @@ export const downloadSubmission = async (req: Request, res: Response) => {
       where: whereClause,
       order: [['createdAt', 'DESC']]
     })
+
+    // Filter by product_category if provided (same logic as getFormSubmission)
+    if (product_category) {
+      forms = forms.filter((form: any) => {
+        const formData = form.form_data;
+        if (!formData || !Array.isArray(formData)) return false;
+
+        return formData.some((item: any) => {
+          if (item?.label !== 'products') return false;
+          if (!item?.value || !Array.isArray(item.value)) return false;
+          return item.value.some((val: any) => val?.productCategory === product_category);
+        });
+      });
+    }
     
     const workbook = new ExcelJS.Workbook();
     
