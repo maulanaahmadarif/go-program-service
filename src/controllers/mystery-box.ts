@@ -1,10 +1,11 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { Op } from "sequelize";
 import { User } from "../../models/User";
 import { UserMysteryBox } from "../../models/UserMysteryBox";
 import { Product } from "../../models/Product";
+import { CustomRequest } from "../types/api";
 
-export const checkEligibility = async (req: any, res: Response) => {
+export const checkEligibility = async (req: CustomRequest, res: Response) => {
 	try {
 		const userId = req.user?.userId;
 
@@ -36,8 +37,8 @@ export const checkEligibility = async (req: any, res: Response) => {
 			
 			const whitelist: string[] = await whitelistResponse.json();
 			isEmailWhitelisted = whitelist.includes(user.email);
-		} catch (error) {
-			console.error("Error fetching whitelist:", error);
+		} catch (error: any) {
+			req.log.error({ error, stack: error.stack }, "Error fetching whitelist");
 			// Continue with whitelist check failed, treat as not whitelisted
 			isEmailWhitelisted = false;
 		}
@@ -74,13 +75,13 @@ export const checkEligibility = async (req: any, res: Response) => {
 			reason: isEligible ? "User is eligible and has available mystery box" : "No available mystery box found"
 		});
 
-	} catch (error) {
-		console.error("Error checking mystery box eligibility:", error);
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error checking mystery box eligibility");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const getMysteryBoxList = async (req: any, res: Response) => {
+export const getMysteryBoxList = async (req: CustomRequest, res: Response) => {
 	try {
 		const { page = 1, limit = 10, status, start_date, end_date } = req.query;
 
@@ -207,8 +208,8 @@ export const getMysteryBoxList = async (req: any, res: Response) => {
 			status: 200
 		});
 
-	} catch (error) {
-		console.error("Error getting mystery box list:", error);
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error getting mystery box list");
 		res.status(500).json({
 			message: "Something went wrong",
 			status: 500
@@ -216,7 +217,7 @@ export const getMysteryBoxList = async (req: any, res: Response) => {
 	}
 };
 
-export const updateMysteryBox = async (req: any, res: Response) => {
+export const updateMysteryBox = async (req: CustomRequest, res: Response) => {
 	try {
 		const userId = req.user?.userId;
 		const { user_mystery_box_id, status } = req.body;
@@ -261,8 +262,8 @@ export const updateMysteryBox = async (req: any, res: Response) => {
 			status: 200,
 		});
 
-	} catch (error) {
-		console.error("Error updating mystery box status:", error);
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error updating mystery box status");
 		res.status(500).json({ 
 			message: "Something went wrong",
 			status: 500

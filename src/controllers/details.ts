@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { Model, Sequelize, where } from 'sequelize';
 import ExcelJS from 'exceljs'
 import { Op } from 'sequelize';
@@ -10,8 +10,9 @@ import { Project } from '../../models/Project';
 import { FormType } from '../../models/FormType';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import dayjs from 'dayjs';
+import { CustomRequest } from '../types/api';
 
-export const getProgramDetail = async (req: Request, res: Response) => {
+export const getProgramDetail = async (req: CustomRequest, res: Response) => {
   try {
     const totalCompany = await Company.count({
       distinct: true,
@@ -59,11 +60,12 @@ export const getProgramDetail = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching company:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching program details');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -72,7 +74,7 @@ export const getProgramDetail = async (req: Request, res: Response) => {
   }
 };
 
-export const getUserProfile = async (req: Request, res: Response) => {
+export const getUserProfile = async (req: CustomRequest, res: Response) => {
   try {
     const userId = req.params.userId // Assuming user ID is passed as a URL parameter
 
@@ -89,13 +91,13 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
     // Send the validated response
     res.status(200).json({ data: user });
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error fetching user profile');
     res.status(500).json({ message: 'An error occurred while fetching the user profile' });
   }
 }
 
-export const getProjectList = async (req: Request, res: Response) => {
+export const getProjectList = async (req: CustomRequest, res: Response) => {
   try {
     const projects = await Project.findAll(
       {
@@ -119,11 +121,12 @@ export const getProjectList = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'List of projects', status: res.status, data: projects });
   } catch (error: any) {
-    console.error('Error fetching projects:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching projects list');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -132,7 +135,7 @@ export const getProjectList = async (req: Request, res: Response) => {
   }
 };
 
-export const getAllDataDownload = async (req: Request, res: Response) => {
+export const getAllDataDownload = async (req: CustomRequest, res: Response) => {
   try {
     const { company_id } = req.query;
 
@@ -322,11 +325,12 @@ export const getAllDataDownload = async (req: Request, res: Response) => {
     res.end();
     // res.json(datas);
   } catch (error: any) {
-    console.error('Error download datas:', error);
+    req.log.error({ error, stack: error.stack }, 'Error downloading data');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 

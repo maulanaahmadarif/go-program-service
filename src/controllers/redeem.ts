@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
@@ -117,7 +117,7 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     res.status(200).json(response);
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error in redemption process:', error);
+    req.log.error({ error, stack: error.stack }, 'Error in redemption process');
 
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
@@ -214,7 +214,7 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
     res.status(200).json(response);
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error in referral redemption process:', error);
+    req.log.error({ error, stack: error.stack }, 'Error in referral redemption process');
 
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
@@ -238,7 +238,7 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
   }
 };
 
-export const redeemList = async (req: Request, res: Response) => {
+export const redeemList = async (req: CustomRequest, res: Response) => {
   try {
     const { page = 1, limit = 10, status, start_date, end_date, product_id, notes } = req.query;
 
@@ -386,7 +386,7 @@ export const redeemList = async (req: Request, res: Response) => {
       status: 200
     });
   } catch (error: any) {
-    console.error('Error getting redemption list:', error);
+    req.log.error({ error, stack: error.stack }, 'Error getting redemption list');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -551,7 +551,7 @@ export const getUserRedemptionList = async (req: CustomRequest, res: Response) =
       status: 200
     });
   } catch (error: any) {
-    console.error('Error getting user redemption list:', error);
+    req.log.error({ error, stack: error.stack }, 'Error getting user redemption list');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -564,7 +564,7 @@ export const getUserRedemptionList = async (req: CustomRequest, res: Response) =
   }
 }
 
-export const rejectRedeem = async (req: Request, res: Response) => {
+export const rejectRedeem = async (req: CustomRequest, res: Response) => {
   const { redemption_id } = req.body;
   const transaction = await sequelize.transaction();
   
@@ -653,10 +653,10 @@ export const rejectRedeem = async (req: Request, res: Response) => {
         htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
 
         sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate }).catch(err => {
-          console.error('Email failed:', err);
+          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
       } catch (emailError) {
-        console.error('Error sending rejection email:', emailError);
+        req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending rejection email');
         // Don't fail the main operation if email fails
       }
     });
@@ -669,7 +669,7 @@ export const rejectRedeem = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error reject redemption:', error);
+    req.log.error({ error, stack: error.stack }, 'Error reject redemption');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -685,7 +685,7 @@ export const rejectRedeem = async (req: Request, res: Response) => {
   }
 }
 
-export const approveRedeem = async (req: Request, res: Response) => {
+export const approveRedeem = async (req: CustomRequest, res: Response) => {
   const { redemption_id } = req.body;
   const transaction = await sequelize.transaction();
   
@@ -766,10 +766,10 @@ export const approveRedeem = async (req: Request, res: Response) => {
         }
 
         sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate }).catch(err => {
-          console.error('Email failed:', err);
+          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
       } catch (emailError) {
-        console.error('Error sending approval email:', emailError);
+        req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending approval email');
         // Don't fail the main operation if email fails
       }
     });
@@ -782,7 +782,7 @@ export const approveRedeem = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error approve redemption:', error);
+    req.log.error({ error, stack: error.stack }, 'Error approve redemption');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -817,7 +817,7 @@ export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) =
       has_redeemed: !!redemption,
     });
   } catch (error: any) {
-    console.error('Error checking redemption status:', error);
+    req.log.error({ error, stack: error.stack }, 'Error checking redemption status');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -830,7 +830,7 @@ export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) =
   }
 };
 
-export const downloadRedeem = async (req: Request, res: Response) => {
+export const downloadRedeem = async (req: CustomRequest, res: Response) => {
   try {
     const { status, start_date, end_date, product_id } = req.query;
 
@@ -1003,7 +1003,7 @@ export const downloadRedeem = async (req: Request, res: Response) => {
     res.end();
 
   } catch (error: any) {
-    console.error('Error downloading redemption data:', error);
+    req.log.error({ error, stack: error.stack }, 'Error downloading redemption data');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {

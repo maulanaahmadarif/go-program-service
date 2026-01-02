@@ -23,11 +23,12 @@ export const getProductList = async (req: CustomRequest, res: Response) => {
 
     res.status(200).json({ message: 'Product list', status: res.status, data: products });
   } catch (error: any) {
-    console.error('Error fetching products:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching products');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 

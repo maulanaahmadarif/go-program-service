@@ -1,10 +1,11 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { RefreshToken } from '../../models/RefreshToken';
 import { User } from '../../models/User';
 import { sequelize } from '../db';
 import { Op } from 'sequelize';
+import { CustomRequest } from '../types/api';
 
 // Helper function to generate tokens
 const generateTokens = (payload: any) => {
@@ -19,7 +20,7 @@ const generateTokens = (payload: any) => {
   return { accessToken, refreshToken };
 };
 
-export const generateNewToken = async (req: Request, res: Response) => {
+export const generateNewToken = async (req: CustomRequest, res: Response) => {
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(403).json({ message: 'Refresh token missing' });
 
@@ -83,12 +84,12 @@ export const generateNewToken = async (req: Request, res: Response) => {
     if (error.name === 'JsonWebTokenError') {
       return res.status(403).json({ message: 'Invalid refresh token' });
     }
-    console.error('Error refreshing tokens:', error);
+    req.log.error({ error, stack: error.stack }, 'Error refreshing tokens');
     return res.status(500).json({ message: 'Something went wrong' });
   }
 };
 
-export const revokeRefreshToken = async (req: Request, res: Response) => {
+export const revokeRefreshToken = async (req: CustomRequest, res: Response) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
     return res.status(404).json({ message: 'No refresh token found' });
@@ -107,8 +108,8 @@ export const revokeRefreshToken = async (req: Request, res: Response) => {
     await token.save();
 
     return res.json({ message: 'Logged out successfully' });
-  } catch (error) {
-    console.error('Error revoking token:', error);
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error revoking token');
     return res.status(500).json({ message: 'Something went wrong' });
   }
 };

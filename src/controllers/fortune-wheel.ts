@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { Op } from "sequelize";
 import dayjs from "dayjs";
 import ExcelJS from "exceljs";
@@ -8,8 +8,9 @@ import { Product } from "../../models/Product";
 import { Company } from "../../models/Company";
 import { FortuneWheelSpin } from "../../models/FortuneWheelSpin";
 import { getUserType } from "../utils";
+import { CustomRequest } from "../types/api";
 
-export const checkEligibility = async (req: any, res: Response) => {
+export const checkEligibility = async (req: CustomRequest, res: Response) => {
 	try {
 		const userId = req.user?.userId;
 
@@ -38,13 +39,13 @@ export const checkEligibility = async (req: any, res: Response) => {
 			spins_remaining: spinsRemaining
 		});
 
-	} catch (error) {
-		console.error("Error checking fortune wheel eligibility:", error);
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error checking fortune wheel eligibility");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const spinWheel = async (req: any, res: Response) => {
+export const spinWheel = async (req: CustomRequest, res: Response) => {
 	const transaction = await sequelize.transaction();
 	try {
 		const userId = req.user?.userId;
@@ -118,14 +119,14 @@ export const spinWheel = async (req: any, res: Response) => {
 			}
 		});
 
-	} catch (error) {
+	} catch (error: any) {
 		await transaction.rollback();
-		console.error("Error in fortune wheel spin:", error);
+		req.log.error({ error, stack: error.stack }, "Error in fortune wheel spin");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const getFortuneWheelList = async (req: Request, res: Response) => {
+export const getFortuneWheelList = async (req: CustomRequest, res: Response) => {
 	try {
 		const { user_id, start_date, end_date, status } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
@@ -238,11 +239,12 @@ export const getFortuneWheelList = async (req: Request, res: Response) => {
 		});
 
 	} catch (error: any) {
-		console.error('Error fetching fortune wheel list:', error);
+		req.log.error({ error, stack: error.stack }, 'Error fetching fortune wheel list');
 
 		// Handle validation errors from Sequelize
 		if (error.name === 'SequelizeValidationError') {
 			const messages = error.errors.map((err: any) => err.message);
+			req.log.error({ validationErrors: messages }, 'Validation error occurred');
 			return res.status(400).json({ message: 'Validation error', errors: messages });
 		}
 
@@ -250,7 +252,7 @@ export const getFortuneWheelList = async (req: Request, res: Response) => {
 	}
 };
 
-export const downloadFortuneWheelList = async (req: Request, res: Response) => {
+export const downloadFortuneWheelList = async (req: CustomRequest, res: Response) => {
 	try {
 		const { user_id, start_date, end_date, status } = req.query;
 		const userWhere: any = {};
@@ -370,11 +372,12 @@ export const downloadFortuneWheelList = async (req: Request, res: Response) => {
 		res.end();
 
 	} catch (error: any) {
-		console.error('Error downloading fortune wheel list:', error);
+		req.log.error({ error, stack: error.stack }, 'Error downloading fortune wheel list');
 
 		// Handle validation errors from Sequelize
 		if (error.name === 'SequelizeValidationError') {
 			const messages = error.errors.map((err: any) => err.message);
+			req.log.error({ validationErrors: messages }, 'Validation error occurred');
 			return res.status(400).json({ message: 'Validation error', errors: messages });
 		}
 

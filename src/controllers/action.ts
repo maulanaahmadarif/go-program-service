@@ -31,11 +31,12 @@ export const getUserActionList = async (req: CustomRequest, res: Response) => {
 
     res.status(200).json({ message: 'List of user action', status: res.status, data: actions });
   } catch (error: any) {
-    console.error('Error delete user:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching user action list');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 

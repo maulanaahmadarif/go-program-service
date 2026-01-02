@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { Sequelize } from 'sequelize';
 
 import { Company } from '../../models/Company';
@@ -6,8 +6,9 @@ import { sequelize } from '../db';
 import { User } from '../../models/User';
 import { RefreshToken } from '../../models/RefreshToken';
 import { VerificationToken } from '../../models/VerificationToken';
+import { CustomRequest } from '../types/api';
 
-export const createCompany = async (req: Request, res: Response) => {
+export const createCompany = async (req: CustomRequest, res: Response) => {
   const { name, address, industry } = req.body;
 
   try {
@@ -19,11 +20,12 @@ export const createCompany = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'Company created', status: res.status });
   } catch (error: any) {
-    console.error('Error creating company:', error);
+    req.log.error({ error, stack: error.stack }, 'Error creating company');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -32,7 +34,7 @@ export const createCompany = async (req: Request, res: Response) => {
   }
 };
 
-export const getCompanyList = async (req: Request, res: Response) => {
+export const getCompanyList = async (req: CustomRequest, res: Response) => {
   try {
     const { fetch_all = 0 } = req.query;
     const sortField: string = (req.query.sortBy as string) || 'total_points';
@@ -106,11 +108,12 @@ export const getCompanyList = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'List of company', status: res.status, data: companies });
   } catch (error: any) {
-    console.error('Error fetching company:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching company list');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -119,7 +122,7 @@ export const getCompanyList = async (req: Request, res: Response) => {
   }
 };
 
-export const getCompanyDetail = async (req: Request, res: Response) => {
+export const getCompanyDetail = async (req: CustomRequest, res: Response) => {
   try {
     const { company_id } = req.params
     const orderDirection: 'asc' | 'desc' = (req.query.order as 'asc' | 'desc') || 'desc';
@@ -149,11 +152,12 @@ export const getCompanyDetail = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'Company Detail', status: res.status, data: companies });
   } catch (error: any) {
-    console.error('Error fetching company:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching company detail');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -162,11 +166,11 @@ export const getCompanyDetail = async (req: Request, res: Response) => {
   }
 };
 
-export const mergeCompany = async (req: Request, res: Response) => {
+export const mergeCompany = async (req: CustomRequest, res: Response) => {
   const { sourceId, destinationId } = req.body;
+  const transaction = await sequelize.transaction();
 
   try {
-    const transaction = await sequelize.transaction();
 
     const sourceCompany = await Company.findByPk(sourceId, { transaction });
     const destinationCompany = await Company.findByPk(destinationId, { transaction });
@@ -195,11 +199,13 @@ export const mergeCompany = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'Company merged', status: res.status });
   } catch (error: any) {
-    console.error('Error merge company:', error);
+    await transaction.rollback();
+    req.log.error({ error, stack: error.stack }, 'Error merging company');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -208,7 +214,7 @@ export const mergeCompany = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteCompany = async (req: Request, res: Response) => {
+export const deleteCompany = async (req: CustomRequest, res: Response) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -250,10 +256,11 @@ export const deleteCompany = async (req: Request, res: Response) => {
     res.status(200).json({ message: 'Company and associated users deleted successfully', status: res.status });
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error deleting company:', error);
+    req.log.error({ error, stack: error.stack }, 'Error deleting company');
 
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 

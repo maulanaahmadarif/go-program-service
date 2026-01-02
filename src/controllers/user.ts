@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import fs from "fs";
@@ -20,8 +20,9 @@ import { sequelize } from "../db";
 import { Redemption } from "../../models/Redemption";
 import { UserAction } from "../../models/UserAction";
 import { Form } from "../../models/Form";
+import { CustomRequest } from "../types/api";
 
-export const userLogin = async (req: Request, res: Response) => {
+export const userLogin = async (req: CustomRequest, res: Response) => {
 	const { email, password, level = "CUSTOMER" } = req.body;
 
 	try {
@@ -90,13 +91,13 @@ export const userLogin = async (req: Request, res: Response) => {
 			accessToken,
 			refreshToken,
 		});
-	} catch (error) {
-		console.error("Error during login:", error);
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error during login");
 		res.status(500).json({ message: "Something went wrong", error });
 	}
 };
 
-export const addInternalUser = async (req: Request, res: Response) => {
+export const addInternalUser = async (req: CustomRequest, res: Response) => {
 	try {
 		const {
 			email,
@@ -128,7 +129,7 @@ export const addInternalUser = async (req: Request, res: Response) => {
 		// Return the created user
 		res.status(200).json({ user });
 	} catch (error: any) {
-		console.error("Error creating user:", error);
+		req.log.error({ error, stack: error.stack }, "Error creating user");
 
 		// Handle validation errors
 		if (error.name === "SequelizeValidationError") {
@@ -144,7 +145,7 @@ export const addInternalUser = async (req: Request, res: Response) => {
 	}
 };
 
-export const userSignup = async (req: Request, res: Response) => {
+export const userSignup = async (req: CustomRequest, res: Response) => {
 	try {
 		const {
 			email,
@@ -277,14 +278,14 @@ export const userSignup = async (req: Request, res: Response) => {
 				subject: "Email Confirmation - Lenovo Go Pro Program",
 				html: htmlTemplate,
 			}).catch(err => {
-				console.error('Email failed:', err);
+				req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
 			});
 
 			// Return the created user
 			res.status(200).json({ user: userProfile });
 		} catch (error: any) {
 			await transaction.rollback();
-			console.error("Error creating user:", error);
+			req.log.error({ error, stack: error.stack }, "Error creating user");
 
 			// Handle validation errors
 			if (error.name === "SequelizeValidationError") {
@@ -303,14 +304,14 @@ export const userSignup = async (req: Request, res: Response) => {
 				.json({ message: "An error occurred while creating the user" });
 		}
 	} catch (error: any) {
-		console.error("Error creating user:", error);
+		req.log.error({ error, stack: error.stack }, "Error creating user");
 		return res
 			.status(500)
 			.json({ message: "An error occurred while creating the user" });
 	}
 };
 
-export const getUserProfile = async (req: any, res: Response) => {
+export const getUserProfile = async (req: CustomRequest, res: Response) => {
 	try {
 		const userId = req.user?.userId;
 
@@ -382,7 +383,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 
 		// Basic response validation: Check required fields
 		if (!userProfile.id || !userProfile.email) {
-			console.error("Response validation error: Missing required fields");
+			req.log.error("Response validation error: Missing required fields");
 			return res.status(500).json({
 				message: "Response validation failed: Missing required fields",
 			});
@@ -391,14 +392,14 @@ export const getUserProfile = async (req: any, res: Response) => {
 		// Send the validated response
 		res.status(200).json({ ...userProfile });
 	} catch (error) {
-		console.error("Error fetching user profile:", error);
+		req.log.error({ error, stack: error.stack }, "Error fetching user profile");
 		res
 			.status(500)
 			.json({ message: "An error occurred while fetching the user profile" });
 	}
 };
 
-export const getUserList = async (req: Request, res: Response) => {
+export const getUserList = async (req: CustomRequest, res: Response) => {
 	try {
 		const { company_id, user_type, start_date, end_date, leaderboard, name, all_users } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
@@ -521,7 +522,7 @@ export const getUserList = async (req: Request, res: Response) => {
 			},
 		});
 	} catch (error: any) {
-		console.error("Error fetching users:", error);
+		req.log.error({ error, stack: error.stack }, "Error fetching users");
 
 		// Handle validation errors from Sequelize
 		if (error.name === "SequelizeValidationError") {
@@ -536,7 +537,7 @@ export const getUserList = async (req: Request, res: Response) => {
 	}
 };
 
-export const forgotPassword = async (req: Request, res: Response) => {
+export const forgotPassword = async (req: CustomRequest, res: Response) => {
 	const { email } = req.body;
 
 	try {
@@ -566,17 +567,17 @@ export const forgotPassword = async (req: Request, res: Response) => {
 			subject: "Password Reset",
 			html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
 		}).catch(err => {
-			console.error('Email failed:', err);
+			req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
 		});
 
 		res.status(200).json({ message: "Reset link sent to your email" });
 	} catch (error) {
-		console.error(error);
+		req.log.error({ error, stack: error.stack }, "Error in forgotPassword");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const userSignupConfirmation = async (req: Request, res: Response) => {
+export const userSignupConfirmation = async (req: CustomRequest, res: Response) => {
 	try {
 		const { token } = req.params;
 
@@ -619,17 +620,17 @@ export const userSignupConfirmation = async (req: Request, res: Response) => {
 			subject: "Welcome to The Lenovo Go Pro Program",
 			html: htmlTemplate,
 		}).catch(err => {
-			console.error('Email failed:', err);
+			req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
 		});
 
 		res.status(200).json({ message: "Email confirmed successfully" });
 	} catch (error) {
-		console.error("Error confirming email:", error);
+		req.log.error({ error, stack: error.stack }, "Error confirming email");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
+export const resetPassword = async (req: CustomRequest, res: Response) => {
 	const { token, newPassword } = req.body;
 
 	try {
@@ -660,7 +661,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
 		res.status(200).json({ message: "Password updated successfully" });
 	} catch (error) {
-		console.error(error);
+		req.log.error({ error, stack: error.stack }, "Error in forgotPassword");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
@@ -719,12 +720,12 @@ export const updateUser = async (req: any, res: Response) => {
 		res.status(200).json({ message: "User updated successfully" });
 	} catch (error) {
 		await transaction.rollback();
-		console.error("Error updating user:", error);
+		req.log.error({ error, stack: error.stack }, "Error updating user");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const deleteUser = async (req: Request, res: Response) => {
+export const deleteUser = async (req: CustomRequest, res: Response) => {
 	const transaction = await sequelize.transaction();
 	try {
 		const userId = req.params.user_id;
@@ -794,7 +795,7 @@ export const deleteUser = async (req: Request, res: Response) => {
 		}
 	} catch (error: any) {
 		await transaction.rollback();
-		console.error("Error deleting user:", error);
+		req.log.error({ error, stack: error.stack }, "Error deleting user");
 
 		if (error.name === "SequelizeValidationError") {
 			const messages = error.errors.map((err: any) => err.message);
@@ -807,7 +808,7 @@ export const deleteUser = async (req: Request, res: Response) => {
 	}
 };
 
-export const activateUser = async (req: Request, res: Response) => {
+export const activateUser = async (req: CustomRequest, res: Response) => {
 	const transaction = await sequelize.transaction();
 	try {
 		const { user_id } = req.body;
@@ -830,7 +831,7 @@ export const activateUser = async (req: Request, res: Response) => {
 		res.status(200).json({ message: "User updated successfully" });
 	} catch (error) {
 		await transaction.rollback();
-		console.error("Error updating user:", error);
+		req.log.error({ error, stack: error.stack }, "Error updating user");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
@@ -892,7 +893,7 @@ export const bulkGenerateReferralCodes = async (
 			updated_users: updatedUsers,
 		});
 	} catch (error) {
-		console.error("Error generating referral codes:", error);
+		req.log.error({ error, stack: error.stack }, "Error generating referral codes");
 		res
 			.status(500)
 			.json({ message: "An error occurred while generating referral codes" });
@@ -962,14 +963,14 @@ export const getReferredUsers = async (req: any, res: Response) => {
 		});
 
 	} catch (error) {
-		console.error("Error fetching referred users:", error);
+		req.log.error({ error, stack: error.stack }, "Error fetching referred users");
 		res.status(500).json({ 
 			message: "An error occurred while fetching referred users"
 		});
 	}
 };
 
-export const downloadUserList = async (req: Request, res: Response) => {
+export const downloadUserList = async (req: CustomRequest, res: Response) => {
 	try {
 		const { company_id, user_type, start_date, end_date } = req.query;
 
@@ -1107,7 +1108,7 @@ export const downloadUserList = async (req: Request, res: Response) => {
 		await workbook.xlsx.write(res);
 		res.end();
 	} catch (error: any) {
-		console.error("Error downloading users:", error);
+		req.log.error({ error, stack: error.stack }, "Error downloading users");
 		if (error.name === "SequelizeValidationError") {
 			const messages = error.errors.map((err: any) => err.message);
 			return res
@@ -1118,7 +1119,7 @@ export const downloadUserList = async (req: Request, res: Response) => {
 	}
 };
 
-export const getReferralCodeUsers = async (req: Request, res: Response) => {
+export const getReferralCodeUsers = async (req: CustomRequest, res: Response) => {
 	try {
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
@@ -1238,7 +1239,7 @@ export const getReferralCodeUsers = async (req: Request, res: Response) => {
 		});
 
 	} catch (error) {
-		console.error('Error fetching referral code users:', error);
+		req.log.error({ error, stack: error.stack }, 'Error fetching referral code users');
 		res.status(500).json({ 
 			message: 'An error occurred while fetching users with referral codes',
 			error 
@@ -1312,7 +1313,7 @@ export const getCurrentUserReferrals = async (req: any, res: Response) => {
 		});
 
 	} catch (error) {
-		console.error("Error fetching referred users:", error);
+		req.log.error({ error, stack: error.stack }, "Error fetching referred users");
 		res.status(500).json({ 
 			message: "An error occurred while fetching referred users",
 			error 
@@ -1320,7 +1321,7 @@ export const getCurrentUserReferrals = async (req: any, res: Response) => {
 	}
 };
 
-export const getUsersWhoUsedReferral = async (req: Request, res: Response) => {
+export const getUsersWhoUsedReferral = async (req: CustomRequest, res: Response) => {
 	try {
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
@@ -1416,12 +1417,12 @@ export const getUsersWhoUsedReferral = async (req: Request, res: Response) => {
 		});
 
 	} catch (error) {
-		console.error('Error fetching users who used referral:', error);
+		req.log.error({ error, stack: error.stack }, 'Error fetching users who used referral');
 		res.status(500).json({ message: 'An error occurred while fetching users who used referral codes', error });
 	}
 };
 
-export const downloadUsersWhoUsedReferral = async (req: Request, res: Response) => {
+export const downloadUsersWhoUsedReferral = async (req: CustomRequest, res: Response) => {
 	try {
 		const { start_date, end_date, company_id, user_type } = req.query;
 
@@ -1560,7 +1561,7 @@ export const downloadUsersWhoUsedReferral = async (req: Request, res: Response) 
 		res.end();
 
 	} catch (error: any) {
-		console.error('Error downloading users who used referral:', error);
+		req.log.error({ error, stack: error.stack }, 'Error downloading users who used referral');
 		if (error.name === 'SequelizeValidationError') {
 			const messages = error.errors.map((err: any) => err.message);
 			return res.status(400).json({ message: 'Validation error', errors: messages });
@@ -1569,7 +1570,7 @@ export const downloadUsersWhoUsedReferral = async (req: Request, res: Response) 
 	}
 };
 
-export const getUsersWithUsedReferralCodes = async (req: Request, res: Response) => {
+export const getUsersWithUsedReferralCodes = async (req: CustomRequest, res: Response) => {
 	try {
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
@@ -1710,7 +1711,7 @@ export const getUsersWithUsedReferralCodes = async (req: Request, res: Response)
 		});
 
 	} catch (error) {
-		console.error('Error fetching users with used referral codes:', error);
+		req.log.error({ error, stack: error.stack }, 'Error fetching users with used referral codes');
 		res.status(500).json({ 
 			message: 'An error occurred while fetching users with used referral codes', 
 			error 

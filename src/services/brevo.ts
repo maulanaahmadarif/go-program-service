@@ -8,6 +8,8 @@
  * - BREVO_BASE_URL          (optional) default: https://api.brevo.com
  */
 
+import logger from '../utils/logger';
+
 interface EmailOptions {
   to: string;
   subject: string;
@@ -91,10 +93,8 @@ export const sendEmailBrevo = async (options: EmailOptions): Promise<void> => {
         `Brevo send failed: ${response.status} ${response.statusText}${body ? ` - ${body}` : ""}`,
       );
     }
-
-    console.log("Email sent successfully (Brevo) to:", options.to);
-  } catch (error) {
-    console.error("Email failed (Brevo):", error);
+  } catch (error: any) {
+    logger.error({ error, stack: error.stack, to: options.to, subject: options.subject }, "Email failed (Brevo)");
     throw error;
   }
 };

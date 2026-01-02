@@ -10,6 +10,8 @@ import { sequelize } from './db';
 import router from './routes';
 import multer, { MulterError } from 'multer';
 import { getMetrics, metricsMiddleware } from './controllers/metrics';
+import pinoHttp from 'pino-http';
+import logger from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -42,6 +44,9 @@ const corsOptions = {
 
 // Apply CORS middleware before other middleware
 app.use(cors(corsOptions));
+
+// HTTP request logging middleware (adds req.log to all requests)
+app.use(pinoHttp({ logger }));
 
 // Middleware
 app.use(bodyParser.json());
@@ -80,7 +85,7 @@ app.set('trust proxy', true)
 app.use((err: MulterError, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof multer.MulterError) {
     // Check for file size limit error
-    console.log('err.code ', err.code);
+    logger.error({ error: err, code: err.code }, 'Multer error occurred');
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({
         message: 'File size exceeds the 10 MB limit. Please upload a smaller file.',
@@ -90,25 +95,26 @@ app.use((err: MulterError, req: Request, res: Response, next: NextFunction) => {
     return res.status(400).json({ message: `Multer error: ${err.message}` });
   }
   // Handle generic errors
+  logger.error({ error: err }, 'Unexpected error in error handler');
   res.status(500).send({ json: 'Something went wrong!' });
 });
 
 // Sync all models with the database (creates tables if they don't exist)
 // sequelize.sync({ alter: true })  // You can add an explicit type for syncDb parameter if needed
-//   .then(() => console.log('Tables created successfully!'))
-//   .catch((error: Error) => console.error('Error creating tables:', error));
+//   .then(() => logger.info('Tables created successfully!'))
+//   .catch((error: Error) => logger.error({ error, stack: error.stack }, 'Error creating tables'));
 
 const startServer = async () => {
   try {
     await sequelize.authenticate();
 
-    console.log("Database connected.");
+    logger.info("Database connected.");
   } catch (err: any) {
-    console.error("connection errors:", err.message);
+    logger.error({ error: err, stack: err.stack }, "Database connection error");
   }
 
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;  // Ensure process.env.PORT is an integer
-  app.listen(PORT, () => console.log(`listening on port ${PORT}`));
+  app.listen(PORT, () => logger.info(`Server listening on port ${PORT}`));
 }
 
 startServer()

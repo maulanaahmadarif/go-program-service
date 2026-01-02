@@ -1,10 +1,11 @@
-import express, { Request, Response } from 'express';
+import express, { Response } from 'express';
 import fs from 'fs';
 import { BlobServiceClient } from '@azure/storage-blob';
 import { fromBuffer, FileTypeResult } from 'file-type';
 import pdf from 'pdf-parse';
 import Tesseract from 'tesseract.js';
 import OpenAI from 'openai';
+import { CustomRequest } from '../types/api';
 
 const client = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'], // This is the default and can be omitted
@@ -12,7 +13,7 @@ const client = new OpenAI({
 
 const router = express.Router();
 
-export const uploadFile = async (req: Request, res: Response) => {
+export const uploadFile = async (req: CustomRequest, res: Response) => {
   try {
     const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING as string;
     const containerName = 'documents';
@@ -42,13 +43,13 @@ export const uploadFile = async (req: Request, res: Response) => {
       message: 'File uploaded successfully',
       filePath: fileUrl, // Public file path
     });
-  } catch (error) {
-    console.error('Error handling upload:', error);
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error handling upload');
     res.status(500).json({ message: 'File upload failed' });
   }
 }
 
-export const _uploadFileDummy = async (req: Request, res: Response) => {
+export const _uploadFileDummy = async (req: CustomRequest, res: Response) => {
   try {
     // Check if the file was uploaded
     if (!req.file) {
@@ -129,8 +130,8 @@ export const _uploadFileDummy = async (req: Request, res: Response) => {
     } else {
       return res.status(400).json({ message: 'Invalid file type. Only images and PDF files are allowed.' });
     }
-  } catch (error) {
-    console.error('Error validating file type:', (error as Error).message);
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error validating file type');
     res.status(500).send({ message: 'Something wrong happens' });
   }
 }

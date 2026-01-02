@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { Op } from 'sequelize';
 
 import { Project } from '../../models/Project';
@@ -6,7 +6,7 @@ import { Form } from '../../models/Form';
 import { User } from '../../models/User';
 import { CustomRequest } from '../types/api';
 
-export const createProject = async (req: Request, res: Response) => {
+export const createProject = async (req: CustomRequest, res: Response) => {
   const { name, user_id } = req.body;
 
   try {
@@ -17,11 +17,12 @@ export const createProject = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'project created', status: res.status, data: project });
   } catch (error: any) {
-    console.error('Error creating project:', error);
+    req.log.error({ error, stack: error.stack }, 'Error creating project');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -30,7 +31,7 @@ export const createProject = async (req: Request, res: Response) => {
   }
 };
 
-export const editProject = async (req: Request, res: Response) => {
+export const editProject = async (req: CustomRequest, res: Response) => {
   const { name, project_id } = req.body;
 
   try {
@@ -49,11 +50,12 @@ export const editProject = async (req: Request, res: Response) => {
       res.status(400).json({ message: 'Project failed to update', status: res.status });
     }
   } catch (error: any) {
-    console.error('Error creating project:', error);
+    req.log.error({ error, stack: error.stack }, 'Error updating project');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 
@@ -78,11 +80,12 @@ export const getProjectList = async (req: CustomRequest, res: Response) => {
 
     res.status(200).json({ message: 'Project list', status: res.status, data: projects });
   } catch (error: any) {
-    console.error('Error fetching projects:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching projects');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
+      req.log.error({ validationErrors: messages }, 'Validation error occurred');
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
 

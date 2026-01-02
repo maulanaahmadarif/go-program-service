@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { Logger } from 'pino';
 
 export interface CustomRequest extends Request {
   user?: {
@@ -6,6 +7,7 @@ export interface CustomRequest extends Request {
     email: string;
     companyId: number;
   };
+  log: Logger;
 }
 
 export interface RedeemPointRequest {

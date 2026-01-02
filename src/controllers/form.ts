@@ -1,4 +1,5 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { CustomRequest } from '../types/api';
 import dayjs from 'dayjs';
 import fs from 'fs';
 import path from 'path';
@@ -20,7 +21,7 @@ import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/
 import { PointTransaction } from '../../models/PointTransaction';
 import { UserMysteryBox } from '../../models/UserMysteryBox';
 
-export const approveSubmission = async (req: any, res: Response) => {
+export const approveSubmission = async (req: CustomRequest, res: Response) => {
   const form_id = req.params.form_id;
   const product_quantity = Number(req.body.product_quantity) || 0;
 
@@ -158,10 +159,10 @@ export const approveSubmission = async (req: any, res: Response) => {
           .replace('{{milestone}}', formType.form_name);
 
         sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate }).catch(err => {
-          console.error('Email failed:', err);
+          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
       } catch (emailError) {
-        console.error('Error sending approval email:', emailError);
+        req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending approval email');
         // Don't fail the main operation if email fails
       }
     });
@@ -177,7 +178,7 @@ export const approveSubmission = async (req: any, res: Response) => {
 
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error approving form:', error);
+		req.log.error({ error, stack: error.stack }, 'Error approving form');
     
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -192,7 +193,7 @@ export const approveSubmission = async (req: any, res: Response) => {
   }
 };
 
-export const deleteForm = async (req: Request, res: Response) => {
+export const deleteForm = async (req: CustomRequest, res: Response) => {
   const form_id = req.params.form_id;
   const reason = req.query.reason as string
 
@@ -230,7 +231,7 @@ export const deleteForm = async (req: Request, res: Response) => {
           .replace('{{reason}}', reason)
 
         sendEmail({ to: user!.email, subject: 'Your Submission is Rejected!', html: htmlTemplate }).catch(err => {
-          console.error('Email failed:', err);
+          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
 
       } else {
@@ -242,7 +243,7 @@ export const deleteForm = async (req: Request, res: Response) => {
       res.status(400).json({ message: 'Form failed to delete', status: res.status });
     }
   } catch (error: any) {
-    console.error('Error creating form type:', error);
+    req.log.error({ error, stack: error.stack }, 'Error creating form type');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -255,7 +256,7 @@ export const deleteForm = async (req: Request, res: Response) => {
   }
 };
 
-export const createFormType = async (req: Request, res: Response) => {
+export const createFormType = async (req: CustomRequest, res: Response) => {
   const { form_name, point_reward } = req.body;
 
   try {
@@ -266,7 +267,7 @@ export const createFormType = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: `${form_name} created`, status: res.status });
   } catch (error: any) {
-    console.error('Error creating form type:', error);
+    req.log.error({ error, stack: error.stack }, 'Error creating form type');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -279,7 +280,7 @@ export const createFormType = async (req: Request, res: Response) => {
   }
 };
 
-export const formSubmission = async (req: any, res: Response) => {
+export const formSubmission = async (req: CustomRequest, res: Response) => {
   const { form_type_id, form_data, project_id, product_quantity = 0 } = req.body;
 
   const transaction = await sequelize.transaction();
@@ -345,7 +346,6 @@ export const formSubmission = async (req: any, res: Response) => {
       await user.save({ transaction });
 
       firstSubmissionBonus = true;
-      console.log(`First submission bonus: ${bonusPoints} points awarded to user ${user.username} for first form submission`);
     }
 
     const currentDate = dayjs();
@@ -439,7 +439,6 @@ export const formSubmission = async (req: any, res: Response) => {
         referrer.lifetime_total_points = (referrer.lifetime_total_points || 0) + referralMilestone.bonusPoints;
         await referrer.save({ transaction });
 
-        console.log(`Referral milestone bonus awarded: ${referralMilestone.bonusPoints} points to user ${referrer.username} for reaching ${referralMilestone.milestone} referred users with form submissions`);
       }
     }
 
@@ -462,7 +461,7 @@ export const formSubmission = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     await transaction.rollback();
-    console.error('Error creating form:', error);
+    req.log.error({ error, stack: error.stack }, 'Error creating form');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -475,7 +474,7 @@ export const formSubmission = async (req: any, res: Response) => {
   }
 };
 
-export const getFormByProject = async (req: any, res: Response) => {
+export const getFormByProject = async (req: CustomRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
     const projectId = req.query.projectId;
@@ -494,7 +493,7 @@ export const getFormByProject = async (req: any, res: Response) => {
 
     res.status(200).json({ message: 'List of forms', status: res.status, data: forms });
   } catch (error: any) {
-    console.error('Error fetching forms:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching forms');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -507,7 +506,7 @@ export const getFormByProject = async (req: any, res: Response) => {
   }
 }
 
-export const getFormSubmission = async (req: Request, res: Response) => {
+export const getFormSubmission = async (req: CustomRequest, res: Response) => {
   try {
     const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category } = req.query;
     const page = parseInt(req.query.page as string) || 1;
@@ -721,7 +720,7 @@ export const getFormSubmission = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching forms:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching forms');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -785,7 +784,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       data: transformedForms
     });
   } catch (error: any) {
-    console.error('Error fetching user forms:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching user forms');
 
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
@@ -796,7 +795,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
   }
 };
 
-export const downloadSubmission = async (req: Request, res: Response) => {
+export const downloadSubmission = async (req: CustomRequest, res: Response) => {
   try {
     const {
       company_id,
@@ -996,7 +995,7 @@ export const downloadSubmission = async (req: Request, res: Response) => {
     res.end();
 
   } catch (error: any) {
-    console.error('Error fetching forms:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching forms');
 
     // Handle validation errors from Sequelize
     if (error.name === 'SequelizeValidationError') {
@@ -1009,7 +1008,7 @@ export const downloadSubmission = async (req: Request, res: Response) => {
   } 
 }
 
-export const getReport = async (req: Request, res: Response) => {
+export const getReport = async (req: CustomRequest, res: Response) => {
   const userId = 130;
 
   const user = await User.findByPk(userId)
@@ -1091,7 +1090,7 @@ export const getReport = async (req: Request, res: Response) => {
   });
 }
 
-export const getFormTypeUsers = async (req: Request, res: Response) => {
+export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -1178,7 +1177,7 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('Error fetching form type users:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching form type users');
     res.status(500).json({ 
       message: 'An error occurred while fetching users with form type submissions',
       error 
@@ -1186,7 +1185,7 @@ export const getFormTypeUsers = async (req: Request, res: Response) => {
   }
 };
 
-export const getChampions = async (req: Request, res: Response) => {
+export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
     // Get all approved submissions for form type 4 (quotation forms) created on or after 2025-10-25
     const quotationForms = await Form.findAll({
@@ -1320,7 +1319,7 @@ export const getChampions = async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('Error fetching champions:', error);
+    req.log.error({ error, stack: error.stack }, 'Error fetching champions');
     res.status(500).json({ 
       message: 'An error occurred while fetching champions',
       error 
