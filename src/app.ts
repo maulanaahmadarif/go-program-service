@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import { sequelize } from './db';
 import router from './routes';
 import multer, { MulterError } from 'multer';
+import { getMetrics } from './controllers/metrics';
 
 // Load environment variables
 dotenv.config();
@@ -66,6 +67,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use(express.static(path.join(process.cwd(), 'public')));
 app.use('/api', router)
+
+// Prometheus metrics endpoint (exposed at root level)
+app.get('/metrics', getMetrics);
+
 app.set('trust proxy', true)
 
 // Error handler for Multer (file size limit exceeded or other errors)
