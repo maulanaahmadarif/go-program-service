@@ -9,7 +9,7 @@ import cookieParser from 'cookie-parser';
 import { sequelize } from './db';
 import router from './routes';
 import multer, { MulterError } from 'multer';
-import { getMetrics } from './controllers/metrics';
+import { getMetrics, metricsMiddleware } from './controllers/metrics';
 
 // Load environment variables
 dotenv.config();
@@ -47,6 +47,9 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Prometheus metrics middleware (track HTTP requests)
+app.use(metricsMiddleware);
 
 // Add security headers
 app.use((req: Request, res: Response, next: NextFunction) => {
