@@ -49,6 +49,10 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 	const transaction = await sequelize.transaction();
 	try {
 		const userId = req.user?.userId;
+		if (!userId) {
+			await transaction.rollback();
+			return res.status(401).json({ message: "Unauthorized" });
+		}
 		const { product_id, prize_name, is_redeemed = false } = req.body;
 
 		if (!prize_name) {

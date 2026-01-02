@@ -161,7 +161,7 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
         sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate }).catch(err => {
           req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
-      } catch (emailError) {
+      } catch (emailError: any) {
         req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending approval email');
         // Don't fail the main operation if email fails
       }
@@ -286,6 +286,11 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
   const transaction = await sequelize.transaction();
 
   const userId = req.user?.userId;
+  if (!userId) {
+    await transaction.rollback();
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
   let isProjectFormCompleted = false;
   let firstSubmissionBonus = false;
   
@@ -477,19 +482,25 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
 export const getFormByProject = async (req: CustomRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const projectId = req.query.projectId;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
 
-    const forms = await Form.findAll(
-      {
-        where: {
-          user_id: userId,
-          project_id: projectId,
-          status: {
-            [Op.or]: ['approved', 'submitted']
-          }
-        }
+    const whereClause: any = {
+      user_id: userId,
+      status: {
+        [Op.or]: ['approved', 'submitted']
       }
-    )
+    };
+
+    if (projectId) {
+      whereClause.project_id = projectId;
+    }
+
+    const forms = await Form.findAll({
+      where: whereClause
+    });
 
     res.status(200).json({ message: 'List of forms', status: res.status, data: forms });
   } catch (error: any) {
@@ -1176,7 +1187,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
       }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error fetching form type users');
     res.status(500).json({ 
       message: 'An error occurred while fetching users with form type submissions',
@@ -1318,7 +1329,7 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
       data: champions
     });
 
-  } catch (error) {
+  } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error fetching champions');
     res.status(500).json({ 
       message: 'An error occurred while fetching champions',

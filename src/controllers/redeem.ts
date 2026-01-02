@@ -655,7 +655,7 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
         sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate }).catch(err => {
           req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
-      } catch (emailError) {
+      } catch (emailError: any) {
         req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending rejection email');
         // Don't fail the main operation if email fails
       }
@@ -768,7 +768,7 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
         sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate }).catch(err => {
           req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
         });
-      } catch (emailError) {
+      } catch (emailError: any) {
         req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending approval email');
         // Don't fail the main operation if email fails
       }

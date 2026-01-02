@@ -391,7 +391,7 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 
 		// Send the validated response
 		res.status(200).json({ ...userProfile });
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error fetching user profile");
 		res
 			.status(500)
@@ -571,7 +571,7 @@ export const forgotPassword = async (req: CustomRequest, res: Response) => {
 		});
 
 		res.status(200).json({ message: "Reset link sent to your email" });
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error in forgotPassword");
 		res.status(500).json({ message: "Something went wrong" });
 	}
@@ -624,7 +624,7 @@ export const userSignupConfirmation = async (req: CustomRequest, res: Response) 
 		});
 
 		res.status(200).json({ message: "Email confirmed successfully" });
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error confirming email");
 		res.status(500).json({ message: "Something went wrong" });
 	}
@@ -660,16 +660,20 @@ export const resetPassword = async (req: CustomRequest, res: Response) => {
 		await verificationToken.destroy();
 
 		res.status(200).json({ message: "Password updated successfully" });
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error in forgotPassword");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
 
-export const updateUser = async (req: any, res: Response) => {
+export const updateUser = async (req: CustomRequest, res: Response) => {
 	const transaction = await sequelize.transaction();
 	try {
 		const userId = req.user?.userId;
+		if (!userId) {
+			await transaction.rollback();
+			return res.status(401).json({ message: "Unauthorized" });
+		}
 		const { fullname, points } = req.body;
 
 		const updateData: any = {};
@@ -718,7 +722,7 @@ export const updateUser = async (req: any, res: Response) => {
 
 		await transaction.commit();
 		res.status(200).json({ message: "User updated successfully" });
-	} catch (error) {
+	} catch (error: any) {
 		await transaction.rollback();
 		req.log.error({ error, stack: error.stack }, "Error updating user");
 		res.status(500).json({ message: "Something went wrong" });
@@ -829,7 +833,7 @@ export const activateUser = async (req: CustomRequest, res: Response) => {
 
 		await transaction.commit();
 		res.status(200).json({ message: "User updated successfully" });
-	} catch (error) {
+	} catch (error: any) {
 		await transaction.rollback();
 		req.log.error({ error, stack: error.stack }, "Error updating user");
 		res.status(500).json({ message: "Something went wrong" });
@@ -837,7 +841,7 @@ export const activateUser = async (req: CustomRequest, res: Response) => {
 };
 
 export const bulkGenerateReferralCodes = async (
-	req: Request,
+	req: CustomRequest,
 	res: Response,
 ) => {
 	try {
@@ -892,7 +896,7 @@ export const bulkGenerateReferralCodes = async (
 			updated_count: updatedUsers.length,
 			updated_users: updatedUsers,
 		});
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error generating referral codes");
 		res
 			.status(500)
@@ -900,7 +904,7 @@ export const bulkGenerateReferralCodes = async (
 	}
 };
 
-export const getReferredUsers = async (req: any, res: Response) => {
+export const getReferredUsers = async (req: CustomRequest, res: Response) => {
 	try {
 		const userId = req.user?.userId;
 
@@ -962,7 +966,7 @@ export const getReferredUsers = async (req: any, res: Response) => {
 			data: transformedUsers
 		});
 
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error fetching referred users");
 		res.status(500).json({ 
 			message: "An error occurred while fetching referred users"
@@ -1238,7 +1242,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 			}
 		});
 
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, 'Error fetching referral code users');
 		res.status(500).json({ 
 			message: 'An error occurred while fetching users with referral codes',
@@ -1247,7 +1251,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 	}
 };
 
-export const getCurrentUserReferrals = async (req: any, res: Response) => {
+export const getCurrentUserReferrals = async (req: CustomRequest, res: Response) => {
 	try {
 		const userId = req.user?.userId;
 		const page = parseInt(req.query.page as string) || 1;
@@ -1312,7 +1316,7 @@ export const getCurrentUserReferrals = async (req: any, res: Response) => {
 			}
 		});
 
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error fetching referred users");
 		res.status(500).json({ 
 			message: "An error occurred while fetching referred users",
@@ -1416,7 +1420,7 @@ export const getUsersWhoUsedReferral = async (req: CustomRequest, res: Response)
 			}
 		});
 
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, 'Error fetching users who used referral');
 		res.status(500).json({ message: 'An error occurred while fetching users who used referral codes', error });
 	}
@@ -1710,7 +1714,7 @@ export const getUsersWithUsedReferralCodes = async (req: CustomRequest, res: Res
 			}
 		});
 
-	} catch (error) {
+	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, 'Error fetching users with used referral codes');
 		res.status(500).json({ 
 			message: 'An error occurred while fetching users with used referral codes', 
