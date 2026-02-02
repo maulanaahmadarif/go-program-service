@@ -20,6 +20,7 @@ import { formatJsonToLabelValueString, getUserType } from '../utils';
 import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/points';
 import { PointTransaction } from '../../models/PointTransaction';
 import { UserMysteryBox } from '../../models/UserMysteryBox';
+import { ExistingCustomer } from '../../models/ExistingCustomer';
 
 export const approveSubmission = async (req: CustomRequest, res: Response) => {
   const form_id = req.params.form_id;
@@ -31,6 +32,23 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
     if (!form_id) {
       await transaction.rollback();
       return res.status(400).json({ message: 'Form ID is required', status: 400 });
+    }
+
+    // Reject immediately if form is already approved (avoid double approve)
+    const existingForm = await Form.findByPk(form_id, {
+      attributes: ['form_id', 'status'],
+      transaction
+    });
+    if (!existingForm) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Form not found', status: 404 });
+    }
+    if (existingForm.status === 'approved') {
+      await transaction.rollback();
+      return res.status(400).json({
+        message: 'Form is already approved',
+        status: 400
+      });
     }
 
     // Step 1: Update form status and get the updated form with all related data in one query
@@ -45,84 +63,80 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
     }
 
     const updatedForm = updatedForms[0];
+    const formSubmittedAt = dayjs(updatedForm.createdAt);
+    const targetDate = dayjs('2026-03-20');
+    const needsCompletionCount = formSubmittedAt.isBefore(targetDate);
 
-    // Step 2: Get all required data in parallel queries
-    const [user, formType, project] = await Promise.all([
-      User.findByPk(updatedForm.user_id, { 
+    // Step 2: Fetch user, formType, project and (when needed) approved count in parallel
+    const [user, formType, project, approvedSubmissionsCount] = await Promise.all([
+      User.findByPk(updatedForm.user_id, {
         transaction,
         attributes: ['user_id', 'username', 'email', 'user_type', 'company_id', 'total_points', 'accomplishment_total_points', 'lifetime_total_points']
       }),
-      FormType.findByPk(updatedForm.form_type_id, { 
+      FormType.findByPk(updatedForm.form_type_id, {
         transaction,
         attributes: ['form_type_id', 'form_name', 'point_reward']
       }),
-      Project.findByPk(updatedForm.project_id, { 
+      Project.findByPk(updatedForm.project_id, {
         transaction,
         attributes: ['project_id', 'name']
-      })
+      }),
+      needsCompletionCount
+        ? Form.count({
+            where: {
+              user_id: updatedForm.user_id,
+              project_id: updatedForm.project_id,
+              status: 'approved'
+            },
+            transaction
+          })
+        : Promise.resolve(0)
     ]);
-
-    // Get company data if needed (for potential future business logic)
-    const company = user ? await Company.findByPk(user.company_id, { 
-      transaction,
-      attributes: ['company_id', 'name']
-    }) : null;
 
     if (!user || !formType || !project) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Required data not found', status: 404 });
     }
 
-    // Step 3: Check if form contains Aura Edition or TKDN Product (optimized)
+    // Step 3: Single pass over form_data for products (Aura/TKDN) and customerType
     let isAuraEdition = false;
+    let customerTypeBonus = 0;
     if (updatedForm.form_data && Array.isArray(updatedForm.form_data)) {
-      const productsEntry = updatedForm.form_data.find(entry => entry.label === 'products');
-      if (productsEntry && Array.isArray(productsEntry.value)) {
-        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
-          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-        );
+      for (const entry of updatedForm.form_data as { label?: string; value?: unknown }[]) {
+        if (entry.label === 'products' && Array.isArray(entry.value)) {
+          isAuraEdition = entry.value.some((product: { productCategory?: string }) =>
+            product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+          );
+        } else if (entry.label === 'customerType' && entry.value === 'New User') {
+          customerTypeBonus = 1000;
+        }
       }
     }
 
     const additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity, isAuraEdition);
-    let completionBonus = 0;
+    const completionBonus = needsCompletionCount && approvedSubmissionsCount === 4 ? 200 : 0;
 
-    // Step 4: Check for completion bonus (only if needed)
-    const currentDate = dayjs();
-    const targetDate = dayjs('2025-12-20');
-    
-    if (currentDate.isBefore(targetDate)) {
-      const additionalPointCompletionPoint = 200;
-      
-      // Only count if user type requires completion bonus
-      const approvedSubmissionsCount = await Form.count({
-        where: {
-          user_id: updatedForm.user_id,
-          project_id: updatedForm.project_id,
-          status: 'approved'
-        },
-        transaction
-      });
-
-      if (approvedSubmissionsCount === 4) {
-        completionBonus = additionalPointCompletionPoint;
-      }
-    }
-
-    // Step 5: Calculate points and create single point transaction
+    // Step 5: Calculate points
     const basePoints = formType.point_reward;
-    const totalPoints = basePoints + additionalPoint + completionBonus;
-    
-    // Create single point transaction record (combining base + bonus)
-    await PointTransaction.create({
-      user_id: user.user_id,
-      points: totalPoints,
-      transaction_type: 'earn',
-      form_id: Number(form_id),
-      description: `Earned ${totalPoints} points (${basePoints} base + ${additionalPoint} bonus + ${completionBonus} completion bonus) for form submission: ${formType.form_name} (${formType.form_type_id})`
-    }, { transaction });
+    const totalPoints = basePoints + additionalPoint + completionBonus + customerTypeBonus;
 
-    // Step 6: Update user points in one operation
+    // Step 6: Create point transaction and user action in parallel, then update user points
+    await Promise.all([
+      PointTransaction.create({
+        user_id: user.user_id,
+        points: totalPoints,
+        transaction_type: 'earn',
+        form_id: Number(form_id),
+        description: `Earned ${totalPoints} points (${basePoints} base + ${additionalPoint} bonus + ${completionBonus} completion + ${customerTypeBonus} New User bonus) for form submission: ${formType.form_name} (${formType.form_type_id})`
+      }, { transaction }),
+      UserAction.create({
+        user_id: user.user_id,
+        entity_type: 'FORM',
+        action_type: 'APPROVED',
+        form_id: Number(form_id),
+      }, { transaction })
+    ]);
+
     await User.update({
       total_points: sequelize.literal(`total_points + ${totalPoints}`),
       accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${totalPoints}`),
@@ -132,23 +146,47 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
       transaction
     });
 
-    // Step 7: Create user action record (preserving original business logic)
-    await UserAction.create({
-      user_id: user.user_id,
-      entity_type: 'FORM',
-      action_type: 'APPROVED',
-      form_id: Number(form_id),
-    }, { transaction });
-
-    // Step 8: Save company if needed (preserving original business logic)
-    if (company && formType) {
-      await company.save({ transaction });
+    // Step 6b: Form type 4 milestone bonus (when approved form type 4 submission falls in date range)
+    const type4StartDate = new Date('2026-02-01T00:00:00.000Z');
+    const type4EndDate = new Date('2026-03-20T23:59:59.999Z');
+    let formType4MilestoneBonus = 0;
+    if (updatedForm.form_type_id === 4 && updatedForm.createdAt >= type4StartDate && updatedForm.createdAt <= type4EndDate) {
+      const type4ApprovedCount = await Form.count({
+        where: {
+          user_id: updatedForm.user_id,
+          form_type_id: 4,
+          status: 'approved',
+          createdAt: { [Op.gte]: type4StartDate, [Op.lte]: type4EndDate }
+        },
+        transaction
+      });
+      if (type4ApprovedCount === 10) {
+        formType4MilestoneBonus = 6000;
+      } else if (type4ApprovedCount === 20) {
+        formType4MilestoneBonus = 8000;
+      } else if (type4ApprovedCount === 30) {
+        formType4MilestoneBonus = 10000;
+      }
+      if (formType4MilestoneBonus > 0) {
+        await PointTransaction.create({
+          user_id: user.user_id,
+          points: formType4MilestoneBonus,
+          transaction_type: 'earn',
+          form_id: Number(form_id),
+          description: `Bonus points for passing ${type4ApprovedCount - 1} form type 4 submissions milestone`
+        }, { transaction });
+        await User.update({
+          total_points: sequelize.literal(`total_points + ${formType4MilestoneBonus}`),
+          accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${formType4MilestoneBonus}`),
+          lifetime_total_points: sequelize.literal(`lifetime_total_points + ${formType4MilestoneBonus}`)
+        }, { where: { user_id: user.user_id }, transaction });
+      }
     }
 
-    // Step 9: Commit transaction first
+    // Step 7: Commit transaction
     await transaction.commit();
 
-    // Step 10: Send email asynchronously (outside transaction)
+    // Step 8: Send email asynchronously (outside transaction)
     setImmediate(async () => {
       try {
         let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
@@ -170,10 +208,12 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
     res.status(200).json({ 
       message: 'Form approved successfully', 
       status: 200,
-      points_awarded: totalPoints,
+      points_awarded: totalPoints + formType4MilestoneBonus,
       base_points: basePoints,
       bonus_points: additionalPoint,
-      completion_bonus: completionBonus
+      completion_bonus: completionBonus,
+      customer_type_bonus: customerTypeBonus,
+      form_type_4_milestone_bonus: formType4MilestoneBonus
     });
 
   } catch (error: any) {
@@ -281,7 +321,7 @@ export const createFormType = async (req: CustomRequest, res: Response) => {
 };
 
 export const formSubmission = async (req: CustomRequest, res: Response) => {
-  const { form_type_id, form_data, project_id, product_quantity = 0 } = req.body;
+  const { form_type_id, form_data, project_id, product_quantity = 0, customer_type, customer_name } = req.body;
 
   const transaction = await sequelize.transaction();
 
@@ -295,6 +335,26 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
   let firstSubmissionBonus = false;
   
   try {
+    // Form type 5: validate New User vs existing customer (customer_name exists only when form_type_id is 5)
+    if (form_type_id === 5 && customer_type === 'New User' && customer_name) {
+      const existingCustomer = await ExistingCustomer.findOne({
+        where: {
+          [Op.or]: [
+            { customer_name: { [Op.iLike]: String(customer_name).trim() } },
+            { alias_name: { [Op.iLike]: String(customer_name).trim() } }
+          ]
+        },
+        transaction
+      });
+      if (existingCustomer) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'Sorry, your Customer is considered as the Retention User of Lenovo. Please change the Customer Type to Retention User',
+          status: 400
+        });
+      }
+    }
+
     const submission = await Form.create({
       user_id: userId,
       form_type_id,
@@ -354,58 +414,11 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
     }
 
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-12-20');
+    const targetDate = dayjs('2026-03-20');
   
     if (currentDate.isBefore(targetDate, 'day')) {
       if (formsCount === 4) {
         isProjectFormCompleted = true;
-      }
-    }
-
-    // Check for form type 4 bonus points
-    if (form_type_id === 4 && user) {
-      // Check if submission is within the date range: May 1, 2025 to June 20, 2025 end of day
-      const startDate = dayjs('2025-10-25T00:00:00');
-      const cutoffDate = dayjs('2025-12-30T23:59:59');
-      
-      if (currentDate.isAfter(startDate) && currentDate.isBefore(cutoffDate)) {
-        const type4SubmittedCount = await Form.count({
-          where: {
-            user_id: userId,
-            form_type_id: 4,
-            createdAt: {
-              [Op.gte]: new Date('2025-10-25T00:00:00.000Z'),
-              [Op.lte]: new Date('2025-12-30T23:59:59.999Z')
-            }
-          },
-          transaction
-        });
-
-        let bonusPoints = 0;
-        if (type4SubmittedCount === 31) { // Passed 30 checkpoint
-          bonusPoints = 6000;
-        } else if (type4SubmittedCount === 41) { // Passed 40 checkpoint
-          bonusPoints = 8000;
-        } else if (type4SubmittedCount === 51) { // Passed 50 checkpoint
-          bonusPoints = 10000;
-        }
-
-        if (bonusPoints > 0) {
-          // Create point transaction record for form type 4 milestone bonus
-          await PointTransaction.create({
-            user_id: user.user_id,
-            points: bonusPoints,
-            transaction_type: 'earn',
-            form_id: submission.form_id,
-            description: `Bonus points for passing ${type4SubmittedCount - 1} form type 4 submissions milestone`
-          }, { transaction });
-
-          // Update user's points
-          user.total_points = (user.total_points || 0) + bonusPoints;
-          user.accomplishment_total_points = (user.accomplishment_total_points || 0) + bonusPoints;
-          user.lifetime_total_points = (user.lifetime_total_points || 0) + bonusPoints;
-          await user.save({ transaction });
-        }
       }
     }
 
@@ -623,7 +636,7 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
 
     // Pre-calculate completion bonuses for all users/projects to avoid repeated queries
     const currentDate = dayjs();
-    const targetDate = dayjs('2025-12-20');
+    const targetDate = dayjs('2026-03-20');
     const completionBonusMap = new Map<string, boolean>();
     
     if (currentDate.isBefore(targetDate)) {
@@ -650,6 +663,7 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
       let points = 0;
       let bonus_points = 0;
       let completion_bonus = 0;
+      let customer_type_bonus = 0;
 
       if (plainForm.status === 'approved') {
         points = plainForm.form_type.point_reward;
@@ -681,6 +695,14 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         if (completionBonusMap.has(key)) {
           completion_bonus = 200;
         }
+
+        // New User customer type bonus (1000 points when form_data has customerType = 'New User')
+        if (plainForm.form_data && Array.isArray(plainForm.form_data)) {
+          const customerTypeEntry = plainForm.form_data.find((entry: any) => entry.label === 'customerType' && entry.value === 'New User');
+          if (customerTypeEntry) {
+            customer_type_bonus = 1000;
+          }
+        }
       }
 
       return {
@@ -688,7 +710,8 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         base_points: points,
         bonus_points: bonus_points,
         completion_bonus: completion_bonus,
-        total_points: points + bonus_points + completion_bonus
+        customer_type_bonus: customer_type_bonus,
+        total_points: points + bonus_points + completion_bonus + customer_type_bonus
       };
     });
 
@@ -757,8 +780,8 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
     if (form_type_id) {
       whereClause.form_type_id = form_type_id;
       whereClause.createdAt = {
-        [Op.gte]: new Date('2025-10-25T00:00:00.000Z'),
-        [Op.lte]: new Date('2025-12-30T23:59:59.999Z')
+        [Op.gte]: new Date('2026-02-01T00:00:00.000Z'),
+        [Op.lte]: new Date('2026-03-20T23:59:59.999Z')
       };
     }
 
@@ -1117,8 +1140,15 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
     }
 
     // Date filter: from May 1, 2025 to June 20, 2025 end of day
-    const startDate = new Date('2025-10-25T00:00:00.000Z');
-    const endDate = new Date('2025-12-30T23:59:59.999Z'); // June 20, 2025 end of day
+    const startDate = new Date('2026-02-01T00:00:00.000Z');
+    const endDate = new Date('2026-03-20T23:59:59.999Z'); // June 20, 2025 end of day
+
+    // JSONB filter: only count forms with products that have productCategory "Aura Edition" or "TKDN Product"
+    // Using PostgreSQL @> operator to check if form_data contains products with the specified categories
+    const productCategoryFilter = sequelize.literal(
+      `(form_data @> '[{"label": "products", "value": [{"productCategory": "Aura Edition"}]}]' OR ` +
+      `form_data @> '[{"label": "products", "value": [{"productCategory": "TKDN Product"}]}]')`
+    );
 
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
@@ -1131,7 +1161,8 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
         createdAt: {
           [Op.gte]: startDate,
           [Op.lte]: endDate
-        }
+        },
+        [Op.and]: [productCategoryFilter]
       },
       group: [sequelize.col('Form.user_id'), sequelize.col('user.user_id')],
       order: [[sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'DESC']],
@@ -1156,7 +1187,8 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
         createdAt: {
           [Op.gte]: startDate,
           [Op.lte]: endDate
-        }
+        },
+        [Op.and]: [productCategoryFilter]
       },
       distinct: true,
       col: 'user_id'
@@ -1198,26 +1230,29 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
 
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
-    // Get all approved submissions for form type 4 (quotation forms) created on or after 2025-10-25
-    const quotationForms = await Form.findAll({
-      where: {
-        status: 'approved',
-        form_type_id: 4,
-        createdAt: {
-          [Op.gte]: new Date('2025-10-25T00:00:00.000Z')
-        }
-      },
-      include: [
-        {
-          model: User,
-          attributes: ['user_id', 'username', 'fullname', 'email', 'total_points']
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
+    const championStartDate = new Date('2026-02-01T00:00:00.000Z');
 
-    // Get champion for form type 5 (close deal) created on or after 2025-10-25
-    const formType5Champion = await sequelize.query(`
+    // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 champion in parallel
+    const [quotationForms, formType5Forms, formType5Champion] = await Promise.all([
+      Form.findAll({
+        where: {
+          status: 'approved',
+          form_type_id: 4,
+          createdAt: { [Op.gte]: championStartDate }
+        },
+        include: [{ model: User, attributes: ['user_id', 'username', 'fullname', 'email', 'total_points'] }],
+        order: [['createdAt', 'DESC']]
+      }),
+      Form.findAll({
+        where: {
+          status: 'approved',
+          form_type_id: 5,
+          createdAt: { [Op.gte]: championStartDate }
+        },
+        include: [{ model: User, attributes: ['user_id', 'username', 'fullname', 'email', 'total_points'] }],
+        order: [['createdAt', 'DESC']]
+      }),
+      sequelize.query(`
       SELECT 
         u.user_id,
         u.username,
@@ -1232,13 +1267,12 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
       INNER JOIN form_types ft ON f.form_type_id = ft.form_type_id
       WHERE f.status = 'approved' 
         AND f.form_type_id = 5
-        AND f.created_at >= '2025-10-25T00:00:00.000Z'
+        AND f.created_at >= '2026-02-01T00:00:00.000Z'
       GROUP BY u.user_id, u.username, u.fullname, u.email, u.total_points
       ORDER BY approved_submissions_count DESC, u.total_points DESC
       LIMIT 1
-    `, {
-      type: QueryTypes.SELECT
-    });
+    `, { type: QueryTypes.SELECT })
+    ]);
 
     // Process quotation forms to count TKDN and Aura Edition submissions per user
     const userCounts: { [key: number]: { tkdn: number; auraEdition: number; user: any } } = {};
@@ -1318,10 +1352,45 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
       };
     }
 
+    // Close deal New User champion: form type 5 approved submissions with customerType = 'New User'
+    const newCustomerCounts: { [key: number]: { count: number; user: any } } = {};
+    formType5Forms.forEach((form: any) => {
+      const plainForm = form.get ? form.get({ plain: true }) : form;
+      const formData = plainForm.form_data;
+      const hasNewUser = formData && Array.isArray(formData) && formData.some(
+        (entry: { label?: string; value?: string }) => entry.label === 'customerType' && entry.value === 'New User'
+      );
+      if (!hasNewUser) return;
+      const userId = plainForm.user_id;
+      if (!newCustomerCounts[userId]) {
+        newCustomerCounts[userId] = { count: 0, user: plainForm.user };
+      }
+      newCustomerCounts[userId].count += 1;
+    });
+
+    let closeDealNewCustomerChampion = null;
+    const newCustomerEntries = Object.entries(newCustomerCounts).filter(([_, data]) => data.count > 0);
+    if (newCustomerEntries.length > 0) {
+      const [userId, data] = newCustomerEntries.reduce((max, current) =>
+        current[1].count > max[1].count ? current : max
+      );
+      closeDealNewCustomerChampion = {
+        user_id: parseInt(userId),
+        username: data.user.username,
+        fullname: data.user.fullname,
+        email: data.user.email,
+        total_points: data.user.total_points,
+        approved_submissions_count: data.count,
+        category: 'New User',
+        form_type_id: 5
+      };
+    }
+
     const champions = {
       tkdn_champion: tkdnChampion,
       aura_champion: auraChampion,
-      close_deal_champion: formType5Champion[0] || null
+      close_deal_champion: formType5Champion[0] || null,
+      close_deal_new_customer_champion: closeDealNewCustomerChampion
     };
 
     res.status(200).json({

@@ -14,6 +14,7 @@ import { VerificationToken } from "../models/VerificationToken";
 import { RefreshToken } from "../models/RefreshToken";
 import { FortuneWheelSpin } from "../models/FortuneWheelSpin";
 import { UserMysteryBox } from "../models/UserMysteryBox";
+import { ExistingCustomer } from "../models/ExistingCustomer";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -39,6 +40,7 @@ export const sequelize = new Sequelize({
 		RefreshToken,
 		FortuneWheelSpin,
 		UserMysteryBox,
+		ExistingCustomer,
 	],
 	dialect: dbConfig.dialect,
 });
