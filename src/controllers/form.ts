@@ -349,6 +349,7 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
       if (existingCustomer) {
         await transaction.rollback();
         return res.status(400).json({
+          is_existing_customer: true,
           message: 'Sorry, your Customer is considered as the Retention User of Lenovo. Please change the Customer Type to Retention User',
           status: 400
         });
