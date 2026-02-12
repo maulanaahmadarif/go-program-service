@@ -25,7 +25,7 @@ export const checkEligibility = async (req: CustomRequest, res: Response) => {
 			where: {
 				user_id: userId,
 				createdAt: {
-					[Op.gte]: new Date('2026-02-01T00:00:00.000Z')
+					[Op.gte]: new Date('2026-02-11T00:00:00.000Z')
 				}
 			}
 		});
@@ -72,7 +72,7 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 			where: {
 				user_id: userId,
 				createdAt: {
-					[Op.gte]: new Date('2026-02-01T00:00:00.000Z')
+					[Op.gte]: new Date('2026-02-11T00:00:00.000Z')
 				}
 			},
 			transaction

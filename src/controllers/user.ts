@@ -350,7 +350,7 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 				user_id: user.user_id,
 				status: 'approved',
 				createdAt: {
-					[Op.gte]: new Date('2026-02-01T00:00:00.000Z')
+					[Op.gte]: new Date('2026-02-11T00:00:00.000Z')
 				}
 			}
 		});
@@ -1141,7 +1141,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
-						AND referred.created_at >= '2026-02-01T00:00:00.000Z'
+						AND referred.created_at >= '2026-02-11T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1160,7 +1160,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-02-01T00:00:00.000Z'
+				AND referred.created_at >= '2026-02-11T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1171,7 +1171,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-02-01T00:00:00.000Z'
+				AND referred.created_at >= '2026-02-11T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1216,7 +1216,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
-							AND referred.created_at >= '2026-02-01T00:00:00.000Z'
+							AND referred.created_at >= '2026-02-11T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 

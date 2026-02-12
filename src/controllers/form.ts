@@ -147,7 +147,7 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
     });
 
     // Step 6b: Form type 4 milestone bonus (when approved form type 4 submission falls in date range)
-    const type4StartDate = new Date('2026-02-01T00:00:00.000Z');
+    const type4StartDate = new Date('2026-02-11T00:00:00.000Z');
     const type4EndDate = new Date('2026-03-20T23:59:59.999Z');
     let formType4MilestoneBonus = 0;
     if (updatedForm.form_type_id === 4 && updatedForm.createdAt >= type4StartDate && updatedForm.createdAt <= type4EndDate) {
@@ -781,7 +781,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
     if (form_type_id) {
       whereClause.form_type_id = form_type_id;
       whereClause.createdAt = {
-        [Op.gte]: new Date('2026-02-01T00:00:00.000Z'),
+        [Op.gte]: new Date('2026-02-11T00:00:00.000Z'),
         [Op.lte]: new Date('2026-03-20T23:59:59.999Z')
       };
     }
@@ -1141,7 +1141,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
     }
 
     // Date filter: from May 1, 2025 to June 20, 2025 end of day
-    const startDate = new Date('2026-02-01T00:00:00.000Z');
+    const startDate = new Date('2026-02-11T00:00:00.000Z');
     const endDate = new Date('2026-03-20T23:59:59.999Z'); // June 20, 2025 end of day
 
     // JSONB filter: only count forms with products that have productCategory "Aura Edition" or "TKDN Product"
@@ -1231,7 +1231,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
 
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
-    const championStartDate = new Date('2026-02-01T00:00:00.000Z');
+    const championStartDate = new Date('2026-02-11T00:00:00.000Z');
 
     // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 champion in parallel
     const [quotationForms, formType5Forms, formType5Champion] = await Promise.all([
@@ -1268,7 +1268,7 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
       INNER JOIN form_types ft ON f.form_type_id = ft.form_type_id
       WHERE f.status = 'approved' 
         AND f.form_type_id = 5
-        AND f.created_at >= '2026-02-01T00:00:00.000Z'
+        AND f.created_at >= '2026-02-11T00:00:00.000Z'
       GROUP BY u.user_id, u.username, u.fullname, u.email, u.total_points
       ORDER BY approved_submissions_count DESC, u.total_points DESC
       LIMIT 1
