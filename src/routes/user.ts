@@ -23,6 +23,7 @@ import {
   downloadUsersWhoUsedReferral,
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
+import { cacheGet } from "../middleware/cache";
 // import checkEmailDomain from "../middleware/emailDomain";
 
 const router = express.Router();
@@ -31,7 +32,7 @@ router.post("/login", userLogin);
 router.post("/signup", userSignup);
 // router.post('/add-internal-user', addInternalUser)
 router.get("/profile", authenticate, getUserProfile);
-router.get("/list", getUserList);
+router.get("/list", cacheGet({ keyPrefix: 'cache:user:list', ttlSeconds: 30 }), getUserList);
 router.get("/referred", authenticate, getReferredUsers);
 router.get("/referral-codes", authenticate, getReferralCodeUsers);
 router.get("/my-referrals", authenticate, getCurrentUserReferrals);

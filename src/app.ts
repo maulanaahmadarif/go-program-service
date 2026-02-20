@@ -12,6 +12,7 @@ import multer, { MulterError } from 'multer';
 import { getMetrics, metricsMiddleware } from './controllers/metrics';
 import pinoHttp from 'pino-http';
 import logger from './utils/logger';
+import { bullBoardPath, bullBoardRouter } from './queues/bullBoard';
 
 // Load environment variables
 dotenv.config();
@@ -74,6 +75,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.static(path.join(process.cwd(), 'public')));
+app.use(bullBoardPath, bullBoardRouter);
 app.use('/api', router)
 
 // Prometheus metrics endpoint (exposed at root level)

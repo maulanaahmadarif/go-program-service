@@ -21,278 +21,180 @@ import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/
 import { PointTransaction } from '../../models/PointTransaction';
 import { UserMysteryBox } from '../../models/UserMysteryBox';
 import { ExistingCustomer } from '../../models/ExistingCustomer';
+import { formBulkApproveQueue, formBulkRejectQueue } from '../queues/formQueues';
+import { approveFormById, ModerationError, rejectFormById } from '../services/formModeration';
+import { queueConfig } from '../config/queue';
 
 export const approveSubmission = async (req: CustomRequest, res: Response) => {
-  const form_id = req.params.form_id;
-  const product_quantity = Number(req.body.product_quantity) || 0;
-
-  const transaction = await sequelize.transaction();
+  const form_id = Number(req.params.form_id);
 
   try {
     if (!form_id) {
-      await transaction.rollback();
       return res.status(400).json({ message: 'Form ID is required', status: 400 });
     }
 
-    // Reject immediately if form is already approved (avoid double approve)
-    const existingForm = await Form.findByPk(form_id, {
-      attributes: ['form_id', 'status'],
-      transaction
-    });
-    if (!existingForm) {
-      await transaction.rollback();
-      return res.status(404).json({ message: 'Form not found', status: 404 });
-    }
-    if (existingForm.status === 'approved') {
-      await transaction.rollback();
-      return res.status(400).json({
-        message: 'Form is already approved',
-        status: 400
-      });
-    }
-
-    // Step 1: Update form status and get the updated form with all related data in one query
-    const [numOfAffectedRows, updatedForms] = await Form.update(
-      { status: 'approved' },
-      { where: { form_id }, returning: true, transaction }
-    );
-
-    if (numOfAffectedRows === 0) {
-      await transaction.rollback();
-      return res.status(404).json({ message: 'Form not found', status: 404 });
-    }
-
-    const updatedForm = updatedForms[0];
-    const formSubmittedAt = dayjs(updatedForm.createdAt);
-    const targetDate = dayjs('2026-03-20');
-    const needsCompletionCount = formSubmittedAt.isBefore(targetDate);
-
-    // Step 2: Fetch user, formType, project and (when needed) approved count in parallel
-    const [user, formType, project, approvedSubmissionsCount] = await Promise.all([
-      User.findByPk(updatedForm.user_id, {
-        transaction,
-        attributes: ['user_id', 'username', 'email', 'user_type', 'company_id', 'total_points', 'accomplishment_total_points', 'lifetime_total_points']
-      }),
-      FormType.findByPk(updatedForm.form_type_id, {
-        transaction,
-        attributes: ['form_type_id', 'form_name', 'point_reward']
-      }),
-      Project.findByPk(updatedForm.project_id, {
-        transaction,
-        attributes: ['project_id', 'name']
-      }),
-      needsCompletionCount
-        ? Form.count({
-            where: {
-              user_id: updatedForm.user_id,
-              project_id: updatedForm.project_id,
-              status: 'approved'
-            },
-            transaction
-          })
-        : Promise.resolve(0)
-    ]);
-
-    if (!user || !formType || !project) {
-      await transaction.rollback();
-      return res.status(404).json({ message: 'Required data not found', status: 404 });
-    }
-
-    // Step 3: Single pass over form_data for products (Aura/TKDN) and customerType
-    let isAuraEdition = false;
-    let customerTypeBonus = 0;
-    if (updatedForm.form_data && Array.isArray(updatedForm.form_data)) {
-      for (const entry of updatedForm.form_data as { label?: string; value?: unknown }[]) {
-        if (entry.label === 'products' && Array.isArray(entry.value)) {
-          isAuraEdition = entry.value.some((product: { productCategory?: string }) =>
-            product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-          );
-        } else if (entry.label === 'customerType' && entry.value === 'New User') {
-          customerTypeBonus = 1000;
-        }
-      }
-    }
-
-    const additionalPoint = calculateBonusPoints(updatedForm.form_type_id, product_quantity, isAuraEdition);
-    const completionBonus = needsCompletionCount && approvedSubmissionsCount === 4 ? 200 : 0;
-
-    // Step 5: Calculate points
-    const basePoints = formType.point_reward;
-    const totalPoints = basePoints + additionalPoint + completionBonus + customerTypeBonus;
-
-    // Step 6: Create point transaction and user action in parallel, then update user points
-    await Promise.all([
-      PointTransaction.create({
-        user_id: user.user_id,
-        points: totalPoints,
-        transaction_type: 'earn',
-        form_id: Number(form_id),
-        description: `Earned ${totalPoints} points (${basePoints} base + ${additionalPoint} bonus + ${completionBonus} completion + ${customerTypeBonus} New User bonus) for form submission: ${formType.form_name} (${formType.form_type_id})`
-      }, { transaction }),
-      UserAction.create({
-        user_id: user.user_id,
-        entity_type: 'FORM',
-        action_type: 'APPROVED',
-        form_id: Number(form_id),
-      }, { transaction })
-    ]);
-
-    await User.update({
-      total_points: sequelize.literal(`total_points + ${totalPoints}`),
-      accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${totalPoints}`),
-      lifetime_total_points: sequelize.literal(`lifetime_total_points + ${totalPoints}`)
-    }, {
-      where: { user_id: user.user_id },
-      transaction
-    });
-
-    // Step 6b: Form type 4 milestone bonus (when approved form type 4 submission falls in date range)
-    const type4StartDate = new Date('2026-02-11T00:00:00.000Z');
-    const type4EndDate = new Date('2026-03-20T23:59:59.999Z');
-    let formType4MilestoneBonus = 0;
-    if (updatedForm.form_type_id === 4 && updatedForm.createdAt >= type4StartDate && updatedForm.createdAt <= type4EndDate) {
-      const type4ApprovedCount = await Form.count({
-        where: {
-          user_id: updatedForm.user_id,
-          form_type_id: 4,
-          status: 'approved',
-          createdAt: { [Op.gte]: type4StartDate, [Op.lte]: type4EndDate }
-        },
-        transaction
-      });
-      if (type4ApprovedCount === 10) {
-        formType4MilestoneBonus = 6000;
-      } else if (type4ApprovedCount === 20) {
-        formType4MilestoneBonus = 8000;
-      } else if (type4ApprovedCount === 30) {
-        formType4MilestoneBonus = 10000;
-      }
-      if (formType4MilestoneBonus > 0) {
-        await PointTransaction.create({
-          user_id: user.user_id,
-          points: formType4MilestoneBonus,
-          transaction_type: 'earn',
-          form_id: Number(form_id),
-          description: `Bonus points for passing ${type4ApprovedCount - 1} form type 4 submissions milestone`
-        }, { transaction });
-        await User.update({
-          total_points: sequelize.literal(`total_points + ${formType4MilestoneBonus}`),
-          accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${formType4MilestoneBonus}`),
-          lifetime_total_points: sequelize.literal(`lifetime_total_points + ${formType4MilestoneBonus}`)
-        }, { where: { user_id: user.user_id }, transaction });
-      }
-    }
-
-    // Step 7: Commit transaction
-    await transaction.commit();
-
-    // Step 8: Send email asynchronously (outside transaction)
-    setImmediate(async () => {
-      try {
-        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'approveEmail.html'), 'utf-8');
-
-        htmlTemplate = htmlTemplate
-          .replace('{{username}}', user.username)
-          .replace('{{project}}', project.name)
-          .replace('{{milestone}}', formType.form_name);
-
-        sendEmail({ to: user.email, subject: 'Your Milestone Submission is Approved!', html: htmlTemplate }).catch(err => {
-          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
-        });
-      } catch (emailError: any) {
-        req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending approval email');
-        // Don't fail the main operation if email fails
-      }
-    });
-
-    res.status(200).json({ 
-      message: 'Form approved successfully', 
-      status: 200,
-      points_awarded: totalPoints + formType4MilestoneBonus,
-      base_points: basePoints,
-      bonus_points: additionalPoint,
-      completion_bonus: completionBonus,
-      customer_type_bonus: customerTypeBonus,
-      form_type_4_milestone_bonus: formType4MilestoneBonus
-    });
-
+    const result = await approveFormById(form_id);
+    res.status(200).json(result);
   } catch (error: any) {
-    await transaction.rollback();
-		req.log.error({ error, stack: error.stack }, 'Error approving form');
-    
-    // Handle validation errors from Sequelize
+    req.log.error({ error, stack: error.stack }, 'Error approving form');
+    if (error instanceof ModerationError) {
+      return res.status(error.status).json({ message: error.message, status: error.status });
+    }
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
-
-    res.status(500).json({ 
-      message: 'Something went wrong', 
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      message: 'Something went wrong',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
 export const deleteForm = async (req: CustomRequest, res: Response) => {
-  const form_id = req.params.form_id;
-  const reason = req.query.reason as string
-
+  const form_id = Number(req.params.form_id);
+  const reason = (req.query.reason as string) || '-';
   try {
-    if (form_id) {
-      const [numOfAffectedRows, updatedForms] = await Form.update(
-        { status: 'rejected', note: reason },
-        { where: { form_id }, returning: true }
-      )
-
-      if (numOfAffectedRows > 0) {
-        const updatedForm = updatedForms[0]; // Access the first updated record
-
-        const user = await User.findByPk(updatedForm.user_id);
-        const project = await Project.findByPk(updatedForm.project_id);
-        const formType = await FormType.findByPk(updatedForm.form_type_id);
-        // await logAction(userId, req.method, 1, 'FORM', req.ip, req.get('User-Agent'));
-    
-        await UserAction.create({
-          user_id: user!.user_id,
-          entity_type: 'FORM',
-          action_type: req.method,
-          form_id: Number(form_id),
-          note: reason,
-          // ip_address: req.ip,
-          // user_agent: req.get('User-Agent'),
-        });
-
-        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'rejectEmail.html'), 'utf-8');
-
-        htmlTemplate = htmlTemplate
-          .replace('{{username}}', user!.username)
-          .replace('{{project}}', project!.name)
-          .replace('{{milestone}}', formType!.form_name)
-          .replace('{{reason}}', reason)
-
-        sendEmail({ to: user!.email, subject: 'Your Submission is Rejected!', html: htmlTemplate }).catch(err => {
-          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
-        });
-
-      } else {
-        res.status(400).json({ message: 'No record found with the specified form_id.', status: res.status });
-      }
-      
-      res.status(200).json({ message: 'Form deleted', status: res.status });
-    } else {
-      res.status(400).json({ message: 'Form failed to delete', status: res.status });
+    if (!form_id) {
+      return res.status(400).json({ message: 'Form failed to delete', status: 400 });
     }
+    const result = await rejectFormById(form_id, reason);
+    res.status(200).json(result);
   } catch (error: any) {
-    req.log.error({ error, stack: error.stack }, 'Error creating form type');
-
-    // Handle validation errors from Sequelize
+    req.log.error({ error, stack: error.stack }, 'Error deleting form');
+    if (error instanceof ModerationError) {
+      return res.status(error.status).json({ message: error.message, status: error.status });
+    }
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map((err: any) => err.message);
       return res.status(400).json({ message: 'Validation error', errors: messages });
     }
-
-    // Handle other types of errors
     res.status(500).json({ message: 'Something went wrong', error });
+  }
+};
+
+const parseBulkIds = (value: unknown): number[] => {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+};
+
+export const enqueueBulkApprove = async (req: CustomRequest, res: Response) => {
+  try {
+    const actor_user_id = req.user?.userId;
+    if (!actor_user_id) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const form_ids = parseBulkIds(req.body.form_ids);
+    const maxBulkIds = queueConfig.bulk.maxIds;
+    if (form_ids.length === 0) {
+      return res.status(400).json({ message: 'form_ids must be a non-empty array of numbers', status: 400 });
+    }
+    if (form_ids.length > maxBulkIds) {
+      return res.status(400).json({ message: `Maximum ${maxBulkIds} form IDs per request`, status: 400 });
+    }
+
+    const job = await formBulkApproveQueue.add('bulk-approve' as const, {
+      form_ids,
+      actor_user_id,
+    });
+
+    return res.status(202).json({
+      message: 'Bulk approve job queued',
+      status: 202,
+      data: {
+        queue: 'approve',
+        job_id: String(job.id),
+        total_items: form_ids.length,
+      },
+    });
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error enqueueing bulk approve');
+    return res.status(500).json({ message: 'Failed to queue bulk approve job', status: 500 });
+  }
+};
+
+export const enqueueBulkReject = async (req: CustomRequest, res: Response) => {
+  try {
+    const actor_user_id = req.user?.userId;
+    if (!actor_user_id) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const form_ids = parseBulkIds(req.body.form_ids);
+    const maxBulkIds = queueConfig.bulk.maxIds;
+    if (form_ids.length === 0) {
+      return res.status(400).json({ message: 'form_ids must be a non-empty array of numbers', status: 400 });
+    }
+    if (form_ids.length > maxBulkIds) {
+      return res.status(400).json({ message: `Maximum ${maxBulkIds} form IDs per request`, status: 400 });
+    }
+
+    const reason = (req.body.reason as string) || '-';
+    const job = await formBulkRejectQueue.add('bulk-reject' as const, {
+      form_ids,
+      actor_user_id,
+      reason,
+    });
+
+    return res.status(202).json({
+      message: 'Bulk reject job queued',
+      status: 202,
+      data: {
+        queue: 'reject',
+        job_id: String(job.id),
+        total_items: form_ids.length,
+      },
+    });
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error enqueueing bulk reject');
+    return res.status(500).json({ message: 'Failed to queue bulk reject job', status: 500 });
+  }
+};
+
+export const getBulkModerationJobStatus = async (req: CustomRequest, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    const queueType = (req.query.queue as string | undefined)?.toLowerCase();
+    const queueCandidates =
+      queueType === 'approve'
+        ? [formBulkApproveQueue]
+        : queueType === 'reject'
+          ? [formBulkRejectQueue]
+          : [formBulkApproveQueue, formBulkRejectQueue];
+
+    let job = null as any;
+    let queueName = '';
+    for (const queue of queueCandidates) {
+      // eslint-disable-next-line no-await-in-loop
+      const found = await queue.getJob(jobId);
+      if (found) {
+        job = found;
+        queueName = queue.name;
+        break;
+      }
+    }
+
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found', status: 404 });
+    }
+
+    const state = await job.getState();
+    return res.status(200).json({
+      message: 'Bulk moderation job status',
+      status: 200,
+      data: {
+        queue: queueName,
+        job_id: String(job.id),
+        state,
+        progress: job.progress || { processed: 0, total: 0 },
+        result: job.returnvalue || null,
+        failed_reason: job.failedReason || null,
+      },
+    });
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error fetching bulk moderation job status');
+    return res.status(500).json({ message: 'Failed to fetch job status', status: 500 });
   }
 };
 

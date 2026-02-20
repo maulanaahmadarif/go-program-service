@@ -2,9 +2,10 @@ import express from 'express';
 
 import { getProductList } from '../controllers/product';
 import authenticate from '../middleware/auth';
+import { cacheGet } from '../middleware/cache';
 
 const router = express.Router();
 
-router.get('/list', getProductList);
+router.get('/list', cacheGet({ keyPrefix: 'cache:product:list', ttlSeconds: 300 }), getProductList);
 
 export default router;
