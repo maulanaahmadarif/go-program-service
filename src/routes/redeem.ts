@@ -4,7 +4,6 @@ import { redeemPoint, redeemReferralPoint, redeemList, getUserRedemptionList, re
 import authenticate from '../middleware/auth';
 import checkDomain from '../middleware/domain';
 import { cacheGet } from '../middleware/cache';
-// import checkDomain from '../middleware/domain';
 
 const router = express.Router();
 

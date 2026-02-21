@@ -3,8 +3,23 @@ const toNumber = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const redisHost = process.env.REDIS_HOST || '127.0.0.1';
+const redisPort = toNumber(process.env.REDIS_PORT, 6379);
+const redisPassword = process.env.REDIS_PASSWORD || '';
+const redisDb = toNumber(process.env.REDIS_DB, 0);
+const encodedPassword = redisPassword ? encodeURIComponent(redisPassword) : '';
+const redisUrl = encodedPassword
+  ? `redis://:${encodedPassword}@${redisHost}:${redisPort}/${redisDb}`
+  : `redis://${redisHost}:${redisPort}/${redisDb}`;
+
 export const queueConfig = {
-  redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+  redis: {
+    host: redisHost,
+    port: redisPort,
+    password: redisPassword,
+    db: redisDb,
+  },
+  redisUrl: process.env.REDIS_URL || redisUrl,
   redisKeyPrefix: process.env.REDIS_KEY_PREFIX || 'loyalty-program',
   bulk: {
     attempts: toNumber(process.env.BULLMQ_BULK_ATTEMPTS, 2),

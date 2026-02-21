@@ -24,9 +24,6 @@ jobs:
     - name: 🐳 Login to Docker Hub
       run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    - name: 📦 Write .env.production
-      run: echo "${{ secrets.ENV_FILE }}" > .env.production
-
     - name: 🛠️ Build Docker image
       run: |
         docker build -t $IMAGE_NAME:latest .
@@ -43,14 +40,25 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           export KUBECONFIG=~/.kube/config
+          NAMESPACE="goprolenovo"
 
-          echo "🔄 Force restarting deployment..."
-          kubectl rollout restart deployment/goprolenovo-app -n goprolenovo
+          echo "🔄 Restart API deployment..."
+          kubectl rollout restart deployment/goprolenovo-app -n ${NAMESPACE}
+
+          echo "⏳ Waiting API rollout..."
+          kubectl rollout status deployment/goprolenovo-app -n ${NAMESPACE}
+
+          if kubectl get deployment goprolenovo-worker-goprolenovo-app -n ${NAMESPACE} >/dev/null 2>&1; then
+            echo "🔄 Restart worker deployment..."
+            kubectl rollout restart deployment/goprolenovo-worker-goprolenovo-app -n ${NAMESPACE}
+
+            echo "⏳ Waiting worker rollout..."
+            kubectl rollout status deployment/goprolenovo-worker-goprolenovo-app -n ${NAMESPACE}
+          else
+            echo "ℹ️ Worker deployment not found, skipping worker restart"
+          fi
 
           echo "✅ Deployment complete"
-          
-          echo "⏳ Waiting for rollout to finish..."
-          kubectl rollout status deployment/goprolenovo-app -n goprolenovo
 
   version-tagging:
     name: Create Release and Tag
