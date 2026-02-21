@@ -115,7 +115,7 @@ const startServer = async () => {
     logger.error({ error: err, stack: err.stack }, "Database connection error");
   }
 
-  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;  // Ensure process.env.PORT is an integer
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3333;  // Ensure process.env.PORT is an integer
   app.listen(PORT, () => logger.info(`Server listening on port ${PORT}`));
 }
 
