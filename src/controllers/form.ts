@@ -436,11 +436,13 @@ export const getFormByProject = async (req: CustomRequest, res: Response) => {
 export const getFormSubmission = async (req: CustomRequest, res: Response) => {
   try {
     const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category } = req.query;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const productCategory = typeof product_category === 'string' ? product_category : undefined;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+    const offset = (page - 1) * limit;
 
     // Validate product_category query parameter
-    if (product_category && !['TKDN Product', 'Aura Edition'].includes(product_category as string)) {
+    if (productCategory && !['TKDN Product', 'Aura Edition'].includes(productCategory)) {
       return res.status(400).json({ 
         message: 'Invalid product_category.',
         status: 400
@@ -507,8 +509,24 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
       };
     }
 
-    // Fetch all forms without pagination first (we'll paginate after filtering)
-    const forms = await Form.findAll({
+    if (productCategory) {
+      whereClause[Op.and] = [
+        sequelize.literal(`
+          EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements("Form"."form_data") AS form_entry
+            WHERE form_entry->>'label' = 'products'
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(COALESCE(form_entry->'value', '[]'::jsonb)) AS product
+                WHERE product->>'productCategory' = ${sequelize.escape(productCategory)}
+              )
+          )
+        `),
+      ];
+    }
+
+    const { count, rows } = await Form.findAndCountAll({
       include: [
         {
           model: User,
@@ -534,35 +552,54 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         }
       ],
       where: whereClause,
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      distinct: true,
     });
 
-    // Pre-calculate completion bonuses for all users/projects to avoid repeated queries
+    const forms = rows.map((form) => form.get({ plain: true }) as any);
     const currentDate = dayjs();
     const targetDate = dayjs('2026-03-20');
     const completionBonusMap = new Map<string, boolean>();
-    
-    if (currentDate.isBefore(targetDate)) {
-      // Get all user-project combinations that have exactly 4 approved submissions
-      const approvedForms = await Form.findAll({
-        where: {
-          status: 'approved'
-        },
-        attributes: ['user_id', 'project_id'],
-        group: ['user_id', 'project_id', 'Form.user_id', 'Form.project_id'],
-        having: sequelize.literal('COUNT(*) = 4')
-      });
 
-      // Store which user-project combinations should get completion bonus
-      approvedForms.forEach(form => {
-        const key = `${form.user_id}-${form.project_id}`;
-        completionBonusMap.set(key, true);
-      });
+    if (currentDate.isBefore(targetDate)) {
+      const candidatePairs = [...new Set(
+        forms
+          .filter((form) => form.status === 'approved')
+          .map((form) => `${form.user_id}-${form.project_id}`)
+      )];
+
+      if (candidatePairs.length > 0) {
+        const pairConditions = candidatePairs.map((key) => {
+          const [candidateUserId, candidateProjectId] = key.split('-').map((value) => Number(value));
+          return { user_id: candidateUserId, project_id: candidateProjectId };
+        });
+
+        const approvedForms = await Form.findAll({
+          attributes: [
+            'user_id',
+            'project_id',
+            [sequelize.fn('COUNT', sequelize.col('form_id')), 'submission_count'],
+          ],
+          where: {
+            status: 'approved',
+            [Op.or]: pairConditions,
+          },
+          group: ['user_id', 'project_id'],
+          having: sequelize.literal('COUNT("form_id") = 4'),
+          raw: true,
+        });
+
+        approvedForms.forEach((form: any) => {
+          const key = `${form.user_id}-${form.project_id}`;
+          completionBonusMap.set(key, true);
+        });
+      }
     }
 
-    // Transform forms to include points calculation
-    let transformedForms = forms.map(form => {
-      const plainForm = form.get({ plain: true }) as any;
+    // Transform current page rows only
+    const transformedForms = forms.map((plainForm) => {
       let points = 0;
       let bonus_points = 0;
       let completion_bonus = 0;
@@ -570,28 +607,20 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
 
       if (plainForm.status === 'approved') {
         points = plainForm.form_type.point_reward;
-        
-        // Calculate bonus points based on product quantity if exists
-        let product_quantity = 0;
-        if (plainForm.form_data && Array.isArray(plainForm.form_data) && plainForm.form_data[0]?.value) {
-          if (Array.isArray(plainForm.form_data[0].value)) {
-            product_quantity = plainForm.form_data[0].value[0]?.numberOfQuantity || 0;
-          }
-        }
 
-        // Check if form contains Aura Edition or TKDN Product
+        // Derive product quantity from form_data.products[*].numberOfQuantity
+        let product_quantity = 0;
         let isAuraEdition = false;
-        if (plainForm.form_data && Array.isArray(plainForm.form_data)) {
+        if (Array.isArray(plainForm.form_data)) {
           const productsEntry = plainForm.form_data.find((entry: any) => entry.label === 'products');
-          if (productsEntry && Array.isArray(productsEntry.value)) {
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
+          if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
+            const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
+            product_quantity = Number.isFinite(quantity) ? quantity : 0;
+            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) =>
               product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
             );
           }
         }
-
-        // Calculate bonus points using utility function
-        bonus_points = calculateBonusPoints(plainForm.form_type.form_type_id, product_quantity, isAuraEdition);
 
         // Check completion bonus from pre-calculated map
         const key = `${plainForm.user_id}-${plainForm.project_id}`;
@@ -600,12 +629,14 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         }
 
         // New User customer type bonus (1000 points when form_data has customerType = 'New User')
-        if (plainForm.form_data && Array.isArray(plainForm.form_data)) {
+        if (Array.isArray(plainForm.form_data)) {
           const customerTypeEntry = plainForm.form_data.find((entry: any) => entry.label === 'customerType' && entry.value === 'New User');
           if (customerTypeEntry) {
             customer_type_bonus = 1000;
           }
         }
+
+        bonus_points = calculateBonusPoints(plainForm.form_type.form_type_id, product_quantity, isAuraEdition);
       }
 
       return {
@@ -618,35 +649,13 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
       };
     });
 
-    // Filter by product_category if provided
-    if (product_category) {
-      transformedForms = transformedForms.filter(form => {
-        if (form.form_data && Array.isArray(form.form_data)) {
-          // Check if form_data contains the specified product category
-          const hasProductCategory = form.form_data.some((item: any) => {
-            if (item.value && Array.isArray(item.value)) {
-              return item.value.some((val: any) => val.productCategory === product_category);
-            }
-            return false;
-          });
-          return hasProductCategory;
-        }
-        return false;
-      });
-    }
-
-    // Calculate pagination on the filtered results
-    const totalItems = transformedForms.length;
+    const totalItems = Number(count);
     const totalPages = Math.ceil(totalItems / limit);
-    const offset = (page - 1) * limit;
-    
-    // Apply pagination to the filtered and transformed results
-    const paginatedForms = transformedForms.slice(offset, offset + limit);
 
     res.status(200).json({ 
       message: 'List of forms', 
       status: res.status, 
-      data: paginatedForms,
+      data: transformedForms,
       pagination: {
         total_items: totalItems,
         total_pages: totalPages,
