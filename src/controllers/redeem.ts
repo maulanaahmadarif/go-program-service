@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import dayjs from 'dayjs';
-import { Op } from 'sequelize';
+import { Op, col } from 'sequelize';
 import ExcelJS from 'exceljs';
 
 import { Redemption } from '../../models/Redemption';
@@ -348,22 +348,33 @@ export const redeemList = async (req: CustomRequest, res: Response) => {
     // Calculate offset
     const offset = (pageNum - 1) * limitNum;
 
-    // Get redemptions with pagination
-    const { count, rows: redemptions } = await Redemption.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          attributes: ['username', 'email']
-        },
-        {
-          model: Product,
-        }
-      ],
-      limit: limitNum,
-      offset: offset,
-      order: [['createdAt', 'DESC']]
-    });
+    const includeConfig = [
+      {
+        model: User,
+        attributes: ['username', 'email']
+      },
+      {
+        model: Product,
+      }
+    ];
+
+    // Use separate count + data queries to avoid expensive findAndCountAll with joins.
+    const [count, redemptions] = await Promise.all([
+      Redemption.count({
+        where: whereClause,
+      }),
+      Redemption.findAll({
+        where: whereClause,
+        include: includeConfig,
+        limit: limitNum,
+        offset: offset,
+        // Use fully-qualified columns so sorting always applies to Redemption rows.
+        order: [
+          [col('Redemption.createdAt'), 'DESC'],
+          [col('Redemption.redemption_id'), 'DESC'],
+        ],
+      }),
+    ]);
 
     // Calculate pagination info
     const totalPages = Math.ceil(count / limitNum);
