@@ -1,8 +1,6 @@
 import { Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import fs from "fs";
-import path from "path";
 import crypto from "crypto";
 import { Op, QueryTypes, fn, col, where } from "sequelize";
 import dayjs from "dayjs";
@@ -11,7 +9,6 @@ import ExcelJS from "exceljs";
 import { User } from "../../models/User";
 import { RefreshToken } from "../../models/RefreshToken";
 import { Company } from "../../models/Company";
-import { sendEmail } from "../services/brevo";
 import { getUserType } from "../utils";
 import { generateTokens } from "./auth";
 import { VerificationToken } from "../../models/VerificationToken";
@@ -21,6 +18,7 @@ import { Redemption } from "../../models/Redemption";
 import { UserAction } from "../../models/UserAction";
 import { Form } from "../../models/Form";
 import { CustomRequest } from "../types/api";
+import { enqueuePasswordResetEmail, enqueueSignupConfirmationEmail, enqueueWelcomeEmail } from "../queues/emailQueue";
 
 export const userLogin = async (req: CustomRequest, res: Response) => {
 	const { email, password, level = "CUSTOMER" } = req.body;
@@ -261,24 +259,14 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				referral_code: user.referral_code,
 			};
 
-			let htmlTemplate = fs.readFileSync(
-				path.join(process.cwd(), "src", "templates", "emailConfirmation.html"),
-				"utf-8",
-			);
-
-			htmlTemplate = htmlTemplate
-				.replace("{{userName}}", user.username)
-				.replace(
-					"{{confirmationLink}}",
-					`${process.env.APP_URL}/email-confirmation?token=${verificationToken}`,
-				);
-
-			sendEmail({
+			const confirmationLink = `${process.env.APP_URL}/email-confirmation?token=${verificationToken}`;
+			enqueueSignupConfirmationEmail({
 				to: user.email,
-				subject: "Email Confirmation - Lenovo Go Pro Program",
-				html: htmlTemplate,
-			}).catch(err => {
-				req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
+				username: user.username,
+				confirmationLink,
+				userId: user.user_id,
+			}).catch((err: any) => {
+				req.log.error({ error: err, stack: err.stack }, 'Failed enqueue signup confirmation email');
 			});
 
 			// Return the created user
@@ -560,14 +548,13 @@ export const forgotPassword = async (req: CustomRequest, res: Response) => {
 			expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
 		});
 
-		// Send email
 		const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}`;
-		sendEmail({
+		enqueuePasswordResetEmail({
 			to: normalizedEmail,
-			subject: "Password Reset",
-			html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
-		}).catch(err => {
-			req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
+			resetUrl,
+			userId: user.user_id,
+		}).catch((err: any) => {
+			req.log.error({ error: err, stack: err.stack }, 'Failed enqueue password reset email');
 		});
 
 		res.status(200).json({ message: "Reset link sent to your email" });
@@ -606,21 +593,13 @@ export const userSignupConfirmation = async (req: CustomRequest, res: Response) 
 		// Delete the used verification token
 		await verificationToken.destroy();
 
-		let htmlTemplate = fs.readFileSync(
-			path.join(process.cwd(), "src", "templates", "welcomeEmail.html"),
-			"utf-8",
-		);
-
-		htmlTemplate = htmlTemplate
-			.replace("{{homePageLink}}", process.env.APP_URL as string)
-			.replace("{{faqLink}}", `${process.env.APP_URL}/faq`);
-
-		sendEmail({
+		enqueueWelcomeEmail({
 			to: user.email,
-			subject: "Welcome to The Lenovo Go Pro Program",
-			html: htmlTemplate,
-		}).catch(err => {
-			req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
+			homePageLink: process.env.APP_URL as string,
+			faqLink: `${process.env.APP_URL}/faq`,
+			userId: user.user_id,
+		}).catch((err: any) => {
+			req.log.error({ error: err, stack: err.stack }, 'Failed enqueue welcome email');
 		});
 
 		res.status(200).json({ message: "Email confirmed successfully" });

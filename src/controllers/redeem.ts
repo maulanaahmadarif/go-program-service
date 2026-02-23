@@ -1,6 +1,4 @@
 import { Response } from 'express';
-import fs from 'fs';
-import path from 'path';
 import dayjs from 'dayjs';
 import { Op } from 'sequelize';
 import ExcelJS from 'exceljs';
@@ -9,10 +7,10 @@ import { Redemption } from '../../models/Redemption';
 import { User } from '../../models/User';
 import { UserAction } from '../../models/UserAction';
 import { sequelize } from '../db';
-import { sendEmail } from '../services/brevo';
 import { Product } from '../../models/Product';
 import { PointTransaction } from '../../models/PointTransaction';
 import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
+import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queues/emailQueue';
 
 export const redeemPoint = async (req: CustomRequest, res: Response) => {
   const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
@@ -645,20 +643,12 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
     // Step 4: Commit transaction first
     await transaction.commit();
 
-    // Step 5: Send email asynchronously (outside transaction)
-    setImmediate(async () => {
-      try {
-        let htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemRejection.html'), 'utf-8');
-
-        htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
-
-        sendEmail({ to: redeemDetail.email, subject: 'Update on Your Redemption Process', html: htmlTemplate }).catch(err => {
-          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
-        });
-      } catch (emailError: any) {
-        req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending rejection email');
-        // Don't fail the main operation if email fails
-      }
+    enqueueRedeemRejectionEmail({
+      to: redeemDetail.email,
+      username: user.username,
+      redemptionId: Number(redemption_id),
+    }).catch((err: any) => {
+      req.log.error({ error: err, stack: err.stack }, 'Failed enqueue redeem rejection email');
     });
 
     res.status(200).json({ 
@@ -738,40 +728,22 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
     // Step 4: Commit transaction first
     await transaction.commit();
 
-    // Step 5: Send email asynchronously (outside transaction)
-    setImmediate(async () => {
-      try {
-        let htmlTemplate: string;
-        let emailSubject: string;
-
-        if (redeemDetail.product_id === 7) {
-          // Use redeemConfirmation.html for Starbucks E-Voucher
-          htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemConfirmation.html'), 'utf-8');
-          htmlTemplate = htmlTemplate.replace('{{username}}', user.username);
-          emailSubject = 'Welcome to Lenovo Go Pro Phase 2 - Starbucks E-Voucher Processing';
-        } else {
-          // Use regular redeemEmail.html for other products
-          htmlTemplate = fs.readFileSync(path.join(process.cwd(), 'src', 'templates', 'redeemEmail.html'), 'utf-8');
-          htmlTemplate = htmlTemplate
-            .replace('{{redemptionDate}}', dayjs(redeemDetail.createdAt).format('DD MMM YYYY HH:mm'))
-            .replace('{{redemptionItem}}', productDetail.name)
-            .replace('{{partnerName}}', redeemDetail.fullname)
-            .replace('{{email}}', redeemDetail.email)
-            .replace('{{phoneNumber}}', redeemDetail.phone_number)
-            .replace('{{address}}', redeemDetail.shipping_address)
-            .replace('{{postalCode}}', redeemDetail.postal_code)
-            .replace('{{accomplishmentScore}}', String(user.accomplishment_total_points ?? 'N/A'))
-            .replace('{{currentScore}}', String(user.total_points ?? 'N/A'));
-          emailSubject = 'Lenovo Go Pro Redemption Notification';
-        }
-
-        sendEmail({ to: redeemDetail.email, subject: emailSubject, html: htmlTemplate }).catch(err => {
-          req.log.error({ error: err, stack: err.stack }, 'Email sending failed');
-        });
-      } catch (emailError: any) {
-        req.log.error({ error: emailError, stack: emailError.stack }, 'Error sending approval email');
-        // Don't fail the main operation if email fails
-      }
+    enqueueRedeemApprovalEmail({
+      to: redeemDetail.email,
+      productId: redeemDetail.product_id,
+      username: user.username,
+      redemptionDate: dayjs(redeemDetail.createdAt).format('DD MMM YYYY HH:mm'),
+      redemptionItem: productDetail.name,
+      partnerName: redeemDetail.fullname,
+      email: redeemDetail.email,
+      phoneNumber: redeemDetail.phone_number,
+      address: redeemDetail.shipping_address,
+      postalCode: redeemDetail.postal_code,
+      accomplishmentScore: String(user.accomplishment_total_points ?? 'N/A'),
+      currentScore: String(user.total_points ?? 'N/A'),
+      redemptionId: Number(redemption_id),
+    }).catch((err: any) => {
+      req.log.error({ error: err, stack: err.stack }, 'Failed enqueue redeem approval email');
     });
 
     res.status(200).json({ 
