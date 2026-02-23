@@ -370,7 +370,7 @@ export const redeemList = async (req: CustomRequest, res: Response) => {
         offset: offset,
         // Use fully-qualified columns so sorting always applies to Redemption rows.
         order: [
-          [col('Redemption.createdAt'), 'DESC'],
+          [col('Redemption.created_at'), 'DESC'],
           [col('Redemption.redemption_id'), 'DESC'],
         ],
       }),
