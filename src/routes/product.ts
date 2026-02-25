@@ -6,6 +6,7 @@ import { cacheGet } from '../middleware/cache';
 
 const router = express.Router();
 
-router.get('/list', cacheGet({ keyPrefix: 'cache:product:list', ttlSeconds: 300 }), getProductList);
+// router.get('/list', cacheGet({ keyPrefix: 'cache:product:list', ttlSeconds: 300 }), getProductList);
+router.get('/list', getProductList);
 
 export default router;
