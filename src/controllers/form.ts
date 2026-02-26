@@ -864,6 +864,45 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
         });
       });
     }
+
+    const currentDate = dayjs();
+    const targetDate = dayjs('2026-03-20');
+    const completionBonusMap = new Map<string, boolean>();
+
+    if (currentDate.isBefore(targetDate)) {
+      const candidatePairs = [...new Set(
+        forms
+          .filter((form: any) => form.status === 'approved')
+          .map((form: any) => `${form.user_id}-${form.project_id}`)
+      )];
+
+      if (candidatePairs.length > 0) {
+        const pairConditions = candidatePairs.map((key) => {
+          const [candidateUserId, candidateProjectId] = key.split('-').map((value) => Number(value));
+          return { user_id: candidateUserId, project_id: candidateProjectId };
+        });
+
+        const approvedForms = await Form.findAll({
+          attributes: [
+            'user_id',
+            'project_id',
+            [sequelize.fn('COUNT', sequelize.col('form_id')), 'submission_count'],
+          ],
+          where: {
+            status: 'approved',
+            [Op.or]: pairConditions,
+          },
+          group: ['user_id', 'project_id'],
+          having: sequelize.literal('COUNT("form_id") = 4'),
+          raw: true,
+        });
+
+        approvedForms.forEach((form: any) => {
+          const key = `${form.user_id}-${form.project_id}`;
+          completionBonusMap.set(key, true);
+        });
+      }
+    }
     
     const workbook = new ExcelJS.Workbook();
     
@@ -890,25 +929,44 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
     // Add data to the worksheet
     forms.forEach((item, index) => {
       let points_gained = 0;
-      if (item.status === 'approved') {
-        // Calculate points for approved forms
-        const product_quantity = item.form_data && Array.isArray(item.form_data) && 
-          item.form_data[0]?.value && Array.isArray(item.form_data[0].value) ? 
-          item.form_data[0].value[0]?.numberOfQuantity || 0 : 0;
+      let base_points = 0;
+      let bonus_points = 0;
+      let completion_bonus = 0;
+      let customer_type_bonus = 0;
 
-        // Check if form contains Aura Edition or TKDN Product
+      if (item.status === 'approved') {
+        base_points = item.form_type.point_reward;
+
+        // Derive product quantity from form_data.products[*].numberOfQuantity
+        let product_quantity = 0;
         let isAuraEdition = false;
         if (item.form_data && Array.isArray(item.form_data)) {
           const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
-          if (productsEntry && Array.isArray(productsEntry.value)) {
+          if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
+            const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
+            product_quantity = Number.isFinite(quantity) ? quantity : 0;
             isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
               product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
             );
           }
         }
 
-        const bonus_points = calculateBonusPoints(item.form_type.form_type_id, product_quantity, isAuraEdition);
-        points_gained = item.form_type.point_reward + bonus_points;
+        // Completion bonus
+        const completionKey = `${item.user_id}-${item.project_id}`;
+        if (completionBonusMap.has(completionKey)) {
+          completion_bonus = 200;
+        }
+
+        // New User customer type bonus (1000 points when form_data has customerType = 'New User')
+        if (Array.isArray(item.form_data)) {
+          const customerTypeEntry = item.form_data.find((entry: any) => entry.label === 'customerType' && entry.value === 'New User');
+          if (customerTypeEntry) {
+            customer_type_bonus = 1000;
+          }
+        }
+
+        bonus_points = calculateBonusPoints(item.form_type.form_type_id, product_quantity, isAuraEdition);
+        points_gained = base_points + bonus_points + completion_bonus + customer_type_bonus;
       }
 
       worksheet.addRow({
