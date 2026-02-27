@@ -389,7 +389,7 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 
 export const getUserList = async (req: CustomRequest, res: Response) => {
 	try {
-		const { company_id, user_type, start_date, end_date, leaderboard, name, all_users } = req.query;
+		const { company_id, user_type, start_date, end_date, leaderboard, name, username, email, all_users } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
 		const offset = (page - 1) * limit;
@@ -418,6 +418,30 @@ export const getUserList = async (req: CustomRequest, res: Response) => {
 			whereCondition[Op.and] = [
 				...(whereCondition[Op.and] || []),
 				fullnameCondition
+			];
+		}
+
+		// Filter by username (case-insensitive partial match)
+		if (username) {
+			const normalizedUsername = (username as string).trim().toLowerCase();
+			const usernameCondition = where(fn('LOWER', col('User.username')), {
+				[Op.like]: `%${normalizedUsername}%`
+			});
+			whereCondition[Op.and] = [
+				...(whereCondition[Op.and] || []),
+				usernameCondition
+			];
+		}
+
+		// Filter by email (case-insensitive partial match)
+		if (email) {
+			const normalizedEmail = (email as string).trim().toLowerCase();
+			const emailCondition = where(fn('LOWER', col('User.email')), {
+				[Op.like]: `%${normalizedEmail}%`
+			});
+			whereCondition[Op.and] = [
+				...(whereCondition[Op.and] || []),
+				emailCondition
 			];
 		}
 
