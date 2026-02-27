@@ -433,6 +433,83 @@ export const getFormByProject = async (req: CustomRequest, res: Response) => {
   }
 }
 
+const calculateSubmissionPoints = (formItem: any, completionBonusFormIds: Set<number>) => {
+  let base_points = 0;
+  let bonus_points = 0;
+  let completion_bonus = 0;
+  let customer_type_bonus = 0;
+
+  if (formItem.status === 'approved') {
+    base_points = formItem.form_type.point_reward;
+
+    // Derive product quantity from form_data.products[*].numberOfQuantity
+    let product_quantity = 0;
+    let isAuraEdition = false;
+    if (Array.isArray(formItem.form_data)) {
+      const productsEntry = formItem.form_data.find((entry: any) => entry.label === 'products');
+      if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
+        const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
+        product_quantity = Number.isFinite(quantity) ? quantity : 0;
+        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) =>
+          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
+        );
+      }
+    }
+
+    // Completion bonus is awarded once to a specific form.
+    if (completionBonusFormIds.has(Number(formItem.form_id))) {
+      completion_bonus = 200;
+    }
+
+    // New User customer type bonus (1000 points when form_data has customerType = 'New User')
+    if (Array.isArray(formItem.form_data)) {
+      const customerTypeEntry = formItem.form_data.find((entry: any) => entry.label === 'customerType' && entry.value === 'New User');
+      if (customerTypeEntry) {
+        customer_type_bonus = 1000;
+      }
+    }
+
+    bonus_points = calculateBonusPoints(formItem.form_type.form_type_id, product_quantity, isAuraEdition);
+  }
+
+  return {
+    base_points,
+    bonus_points,
+    completion_bonus,
+    customer_type_bonus,
+    total_points: base_points + bonus_points + completion_bonus + customer_type_bonus,
+  };
+};
+
+const getCompletionBonusFormIds = async (forms: any[]): Promise<Set<number>> => {
+  const completionBonusFormIds = new Set<number>();
+  const formIds = forms.map((form) => Number(form.form_id)).filter((id) => Number.isInteger(id) && id > 0);
+
+  if (formIds.length === 0) {
+    return completionBonusFormIds;
+  }
+
+  const completionTransactions = await PointTransaction.findAll({
+    attributes: ['form_id', 'description'],
+    where: {
+      transaction_type: 'earn',
+      form_id: { [Op.in]: formIds },
+      description: { [Op.iLike]: '% completion %' },
+    },
+    raw: true,
+  });
+
+  completionTransactions.forEach((tx: any) => {
+    const formId = Number(tx.form_id);
+    const description = String(tx.description || '');
+    if (Number.isInteger(formId) && formId > 0 && /\+\s*200\s+completion\b/i.test(description)) {
+      completionBonusFormIds.add(formId);
+    }
+  });
+
+  return completionBonusFormIds;
+};
+
 export const getFormSubmission = async (req: CustomRequest, res: Response) => {
   try {
     const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category } = req.query;
@@ -559,93 +636,14 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
     });
 
     const forms = rows.map((form) => form.get({ plain: true }) as any);
-    const currentDate = dayjs();
-    const targetDate = dayjs('2026-03-20');
-    const completionBonusMap = new Map<string, boolean>();
-
-    if (currentDate.isBefore(targetDate)) {
-      const candidatePairs = [...new Set(
-        forms
-          .filter((form) => form.status === 'approved')
-          .map((form) => `${form.user_id}-${form.project_id}`)
-      )];
-
-      if (candidatePairs.length > 0) {
-        const pairConditions = candidatePairs.map((key) => {
-          const [candidateUserId, candidateProjectId] = key.split('-').map((value) => Number(value));
-          return { user_id: candidateUserId, project_id: candidateProjectId };
-        });
-
-        const approvedForms = await Form.findAll({
-          attributes: [
-            'user_id',
-            'project_id',
-            [sequelize.fn('COUNT', sequelize.col('form_id')), 'submission_count'],
-          ],
-          where: {
-            status: 'approved',
-            [Op.or]: pairConditions,
-          },
-          group: ['user_id', 'project_id'],
-          having: sequelize.literal('COUNT("form_id") = 4'),
-          raw: true,
-        });
-
-        approvedForms.forEach((form: any) => {
-          const key = `${form.user_id}-${form.project_id}`;
-          completionBonusMap.set(key, true);
-        });
-      }
-    }
+    const completionBonusFormIds = await getCompletionBonusFormIds(forms);
 
     // Transform current page rows only
     const transformedForms = forms.map((plainForm) => {
-      let points = 0;
-      let bonus_points = 0;
-      let completion_bonus = 0;
-      let customer_type_bonus = 0;
-
-      if (plainForm.status === 'approved') {
-        points = plainForm.form_type.point_reward;
-
-        // Derive product quantity from form_data.products[*].numberOfQuantity
-        let product_quantity = 0;
-        let isAuraEdition = false;
-        if (Array.isArray(plainForm.form_data)) {
-          const productsEntry = plainForm.form_data.find((entry: any) => entry.label === 'products');
-          if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
-            const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
-            product_quantity = Number.isFinite(quantity) ? quantity : 0;
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) =>
-              product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-            );
-          }
-        }
-
-        // Check completion bonus from pre-calculated map
-        const key = `${plainForm.user_id}-${plainForm.project_id}`;
-        if (completionBonusMap.has(key)) {
-          completion_bonus = 200;
-        }
-
-        // New User customer type bonus (1000 points when form_data has customerType = 'New User')
-        if (Array.isArray(plainForm.form_data)) {
-          const customerTypeEntry = plainForm.form_data.find((entry: any) => entry.label === 'customerType' && entry.value === 'New User');
-          if (customerTypeEntry) {
-            customer_type_bonus = 1000;
-          }
-        }
-
-        bonus_points = calculateBonusPoints(plainForm.form_type.form_type_id, product_quantity, isAuraEdition);
-      }
-
+      const points = calculateSubmissionPoints(plainForm, completionBonusFormIds);
       return {
         ...plainForm,
-        base_points: points,
-        bonus_points: bonus_points,
-        completion_bonus: completion_bonus,
-        customer_type_bonus: customer_type_bonus,
-        total_points: points + bonus_points + completion_bonus + customer_type_bonus
+        ...points,
       };
     });
 
@@ -865,44 +863,7 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
       });
     }
 
-    const currentDate = dayjs();
-    const targetDate = dayjs('2026-03-20');
-    const completionBonusMap = new Map<string, boolean>();
-
-    if (currentDate.isBefore(targetDate)) {
-      const candidatePairs = [...new Set(
-        forms
-          .filter((form: any) => form.status === 'approved')
-          .map((form: any) => `${form.user_id}-${form.project_id}`)
-      )];
-
-      if (candidatePairs.length > 0) {
-        const pairConditions = candidatePairs.map((key) => {
-          const [candidateUserId, candidateProjectId] = key.split('-').map((value) => Number(value));
-          return { user_id: candidateUserId, project_id: candidateProjectId };
-        });
-
-        const approvedForms = await Form.findAll({
-          attributes: [
-            'user_id',
-            'project_id',
-            [sequelize.fn('COUNT', sequelize.col('form_id')), 'submission_count'],
-          ],
-          where: {
-            status: 'approved',
-            [Op.or]: pairConditions,
-          },
-          group: ['user_id', 'project_id'],
-          having: sequelize.literal('COUNT("form_id") = 4'),
-          raw: true,
-        });
-
-        approvedForms.forEach((form: any) => {
-          const key = `${form.user_id}-${form.project_id}`;
-          completionBonusMap.set(key, true);
-        });
-      }
-    }
+    const completionBonusFormIds = await getCompletionBonusFormIds(forms as any[]);
     
     const workbook = new ExcelJS.Workbook();
     
@@ -928,46 +889,8 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
 
     // Add data to the worksheet
     forms.forEach((item, index) => {
-      let points_gained = 0;
-      let base_points = 0;
-      let bonus_points = 0;
-      let completion_bonus = 0;
-      let customer_type_bonus = 0;
-
-      if (item.status === 'approved') {
-        base_points = item.form_type.point_reward;
-
-        // Derive product quantity from form_data.products[*].numberOfQuantity
-        let product_quantity = 0;
-        let isAuraEdition = false;
-        if (item.form_data && Array.isArray(item.form_data)) {
-          const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
-          if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
-            const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
-            product_quantity = Number.isFinite(quantity) ? quantity : 0;
-            isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
-              product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-            );
-          }
-        }
-
-        // Completion bonus
-        const completionKey = `${item.user_id}-${item.project_id}`;
-        if (completionBonusMap.has(completionKey)) {
-          completion_bonus = 200;
-        }
-
-        // New User customer type bonus (1000 points when form_data has customerType = 'New User')
-        if (Array.isArray(item.form_data)) {
-          const customerTypeEntry = item.form_data.find((entry: any) => entry.label === 'customerType' && entry.value === 'New User');
-          if (customerTypeEntry) {
-            customer_type_bonus = 1000;
-          }
-        }
-
-        bonus_points = calculateBonusPoints(item.form_type.form_type_id, product_quantity, isAuraEdition);
-        points_gained = base_points + bonus_points + completion_bonus + customer_type_bonus;
-      }
+      const points = calculateSubmissionPoints(item, completionBonusFormIds);
+      const points_gained = points.total_points;
 
       worksheet.addRow({
         no: index + 1,
