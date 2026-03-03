@@ -72,3 +72,21 @@ export const cacheGet = ({ keyPrefix, ttlSeconds, includeUser = false }: CacheGe
     return next();
   };
 
+export const invalidateCacheByPrefix = async (keyPrefix: string): Promise<void> => {
+  try {
+    const client = getCacheClient();
+    const namespacedPrefix = `${queueConfig.redisKeyPrefix}:${keyPrefix}`;
+    const pattern = `${namespacedPrefix}*`;
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await client.del(...keys);
+      }
+    } while (cursor !== '0');
+  } catch {
+    // Fail silently if Redis is unavailable
+  }
+};
+

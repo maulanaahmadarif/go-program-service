@@ -8,6 +8,7 @@ import {
 } from '../queues/formQueues';
 import { redisConnection } from '../queues/redis';
 import { approveFormById, ModerationError, rejectFormById } from '../services/formModeration';
+import { invalidateCacheByPrefix } from '../middleware/cache';
 import logger from '../utils/logger';
 import { queueConfig } from '../config/queue';
 
@@ -72,6 +73,10 @@ const processApproveBulkJob = async (job: Job<BulkApproveJobData>) => {
   const successCount = results.filter((item) => item.success).length;
   const failedCount = results.length - successCount;
 
+  if (successCount > 0) {
+    await invalidateCacheByPrefix('cache:form:submission');
+  }
+
   return {
     queue: FORM_BULK_APPROVE_QUEUE,
     total: results.length,
@@ -118,6 +123,10 @@ const processRejectBulkJob = async (job: Job<BulkRejectJobData>) => {
 
   const successCount = results.filter((item) => item.success).length;
   const failedCount = results.length - successCount;
+
+  if (successCount > 0) {
+    await invalidateCacheByPrefix('cache:form:submission');
+  }
 
   return {
     queue: FORM_BULK_REJECT_QUEUE,

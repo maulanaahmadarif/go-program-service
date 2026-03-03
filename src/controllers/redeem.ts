@@ -11,6 +11,7 @@ import { Product } from '../../models/Product';
 import { PointTransaction } from '../../models/PointTransaction';
 import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
 import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queues/emailQueue';
+import { invalidateCacheByPrefix } from '../middleware/cache';
 
 export const redeemPoint = async (req: CustomRequest, res: Response) => {
   const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
@@ -662,6 +663,8 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       req.log.error({ error: err, stack: err.stack }, 'Failed enqueue redeem rejection email');
     });
 
+    await invalidateCacheByPrefix('cache:redeem:list');
+
     res.status(200).json({ 
       message: 'Redeem process rejected', 
       status: 200,
@@ -756,6 +759,8 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
     }).catch((err: any) => {
       req.log.error({ error: err, stack: err.stack }, 'Failed enqueue redeem approval email');
     });
+
+    await invalidateCacheByPrefix('cache:redeem:list');
 
     res.status(200).json({ 
       message: 'Redeem process approved', 

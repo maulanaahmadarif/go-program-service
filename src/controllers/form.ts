@@ -24,6 +24,7 @@ import { ExistingCustomer } from '../../models/ExistingCustomer';
 import { formBulkApproveQueue, formBulkRejectQueue } from '../queues/formQueues';
 import { approveFormById, ModerationError, rejectFormById } from '../services/formModeration';
 import { queueConfig } from '../config/queue';
+import { invalidateCacheByPrefix } from '../middleware/cache';
 
 export const approveSubmission = async (req: CustomRequest, res: Response) => {
   const form_id = Number(req.params.form_id);
@@ -34,6 +35,7 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
     }
 
     const result = await approveFormById(form_id);
+    await invalidateCacheByPrefix('cache:form:submission');
     res.status(200).json(result);
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error approving form');
@@ -59,6 +61,7 @@ export const deleteForm = async (req: CustomRequest, res: Response) => {
       return res.status(400).json({ message: 'Form failed to delete', status: 400 });
     }
     const result = await rejectFormById(form_id, reason);
+    await invalidateCacheByPrefix('cache:form:submission');
     res.status(200).json(result);
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error deleting form');
