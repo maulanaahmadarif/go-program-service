@@ -48,7 +48,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // HTTP request logging middleware (adds req.log to all requests)
-// app.use(pinoHttp({ logger }));
+app.use(pinoHttp({ logger }));
 
 // Middleware
 app.use(bodyParser.json());
@@ -98,8 +98,7 @@ app.use((err: MulterError, req: Request, res: Response, next: NextFunction) => {
     return res.status(400).json({ message: `Multer error: ${err.message}` });
   }
   // Handle generic errors
-  // logger.error({ error: err }, 'Unexpected error in error handler');
-  console.error(err);
+  logger.error({ error: err }, 'Unexpected error in error handler');
   res.status(500).send({ json: 'Something went wrong!' });
 });
 
