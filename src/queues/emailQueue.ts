@@ -108,7 +108,7 @@ export const enqueueApprovalEmail = async (data: Omit<ApprovalEmailJobData, 'typ
   await emailNotificationQueue.add(
     'approval-email',
     { ...data, type: 'approval' },
-    { jobId: `approval:${data.formId}` }
+    { jobId: `approval-${data.formId}` }
   );
 };
 
@@ -116,7 +116,7 @@ export const enqueueRejectionEmail = async (data: Omit<RejectionEmailJobData, 't
   await emailNotificationQueue.add(
     'rejection-email',
     { ...data, type: 'rejection' },
-    { jobId: `rejection:${data.formId}` }
+    { jobId: `rejection-${data.formId}` }
   );
 };
 
@@ -124,7 +124,7 @@ export const enqueueSignupConfirmationEmail = async (data: Omit<SignupConfirmati
   await emailNotificationQueue.add(
     'signup-confirmation-email',
     { ...data, type: 'signup-confirmation' },
-    { jobId: `signup-confirmation:${data.userId}` }
+    { jobId: `signup-confirmation-${data.userId}` }
   );
 };
 
@@ -132,7 +132,7 @@ export const enqueueWelcomeEmail = async (data: Omit<WelcomeEmailJobData, 'type'
   await emailNotificationQueue.add(
     'welcome-email',
     { ...data, type: 'welcome' },
-    { jobId: `welcome:${data.userId}` }
+    { jobId: `welcome-${data.userId}` }
   );
 };
 
@@ -140,7 +140,7 @@ export const enqueuePasswordResetEmail = async (data: Omit<PasswordResetEmailJob
   await emailNotificationQueue.add(
     'password-reset-email',
     { ...data, type: 'password-reset' },
-    { jobId: `password-reset:${data.userId}` }
+    { jobId: `password-reset-${data.userId}` }
   );
 };
 
@@ -148,7 +148,7 @@ export const enqueueRedeemApprovalEmail = async (data: Omit<RedeemApprovalEmailJ
   await emailNotificationQueue.add(
     'redeem-approval-email',
     { ...data, type: 'redeem-approval' },
-    { jobId: `redeem-approval:${data.redemptionId}` }
+    { jobId: `redeem-approval-${data.redemptionId}` }
   );
 };
 
@@ -156,7 +156,7 @@ export const enqueueRedeemRejectionEmail = async (data: Omit<RedeemRejectionEmai
   await emailNotificationQueue.add(
     'redeem-rejection-email',
     { ...data, type: 'redeem-rejection' },
-    { jobId: `redeem-rejection:${data.redemptionId}` }
+    { jobId: `redeem-rejection-${data.redemptionId}` }
   );
 };
 
