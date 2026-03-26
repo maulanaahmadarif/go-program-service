@@ -12,10 +12,32 @@ import { PointTransaction } from '../../models/PointTransaction';
 import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
 import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queues/emailQueue';
 import { invalidateCacheByPrefix } from '../middleware/cache';
+import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
+
+export const getRedemptionWindowStatus = async (req: CustomRequest, res: Response) => {
+  try {
+    const info = getRedemptionWindowInfo();
+    res.status(200).json(info);
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error getting redemption window status');
+    res.status(500).json({ message: 'Something went wrong' });
+  }
+};
 
 export const redeemPoint = async (req: CustomRequest, res: Response) => {
   const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
   const user_id = req.user?.userId as number;
+
+  if (!isRedemptionWindowOpen()) {
+    const info = getRedemptionWindowInfo();
+    return res.status(400).json({
+      message: 'Redemption is not active',
+      is_open: false,
+      start_at: info.start_at,
+      end_at: info.end_at,
+      timezone: info.timezone,
+    });
+  }
 
   const transaction = await sequelize.transaction();
 
