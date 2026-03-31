@@ -28,7 +28,7 @@ import checkEmailDomain from "../middleware/emailDomain";
 
 const router = express.Router();
 
-router.post("/login", checkEmailDomain, userLogin);
+router.post("/login", userLogin);
 router.post("/signup", checkEmailDomain, userSignup);
 // router.post('/add-internal-user', addInternalUser)
 router.get("/profile", authenticate, getUserProfile);
