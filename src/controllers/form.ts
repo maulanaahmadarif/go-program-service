@@ -688,7 +688,7 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
 
 export const getFormSubmissionByUserId = async (req: any, res: Response) => {
   try {
-    const userId = 7 // req.user?.userId;
+    const userId = req.user?.userId;
     const { form_type_id } = req.query;
     const parsedFormTypeId =
       form_type_id !== undefined && form_type_id !== ''
