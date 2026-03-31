@@ -26,6 +26,12 @@ import { approveFormById, ModerationError, rejectFormById } from '../services/fo
 import { queueConfig } from '../config/queue';
 import { invalidateCacheByPrefix } from '../middleware/cache';
 
+/** Same TKDN / Aura JSONB @> predicate as getFormTypeUsers (label `products`, productCategory on line items). */
+const tkdnAuraProductCategoryFilter = sequelize.literal(
+  `(form_data @> '[{"label": "products", "value": [{"productCategory": "Aura Edition"}]}]' OR ` +
+  `form_data @> '[{"label": "products", "value": [{"productCategory": "TKDN Product"}]}]')`
+);
+
 export const approveSubmission = async (req: CustomRequest, res: Response) => {
   const form_id = Number(req.params.form_id);
 
@@ -682,8 +688,13 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
 
 export const getFormSubmissionByUserId = async (req: any, res: Response) => {
   try {
-    const userId = req.user?.userId;
+    const userId = 7 // req.user?.userId;
     const { form_type_id } = req.query;
+    const parsedFormTypeId =
+      form_type_id !== undefined && form_type_id !== ''
+        ? parseInt(String(form_type_id), 10)
+        : NaN;
+    const formTypeIdNum = Number.isNaN(parsedFormTypeId) ? NaN : parsedFormTypeId;
 
     const whereClause: any = {
       user_id: userId,
@@ -691,11 +702,18 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
     };
 
     if (form_type_id) {
-      whereClause.form_type_id = form_type_id;
+      whereClause.form_type_id = Number.isNaN(parsedFormTypeId)
+        ? form_type_id
+        : parsedFormTypeId;
       whereClause.createdAt = {
         [Op.gte]: new Date('2026-02-11T00:00:00.000Z'),
         [Op.lte]: new Date('2026-03-20T23:59:59.999Z')
       };
+    }
+
+    // Form type 4 (quotation): same TKDN / Aura filter as getFormTypeUsers (JSONB @> on products)
+    if (formTypeIdNum === 4) {
+      whereClause[Op.and] = [tkdnAuraProductCategoryFilter];
     }
 
     const forms = await Form.findAll({
@@ -1039,13 +1057,6 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
     const startDate = new Date('2026-02-11T00:00:00.000Z');
     const endDate = new Date('2026-03-20T23:59:59.999Z'); // June 20, 2025 end of day
 
-    // JSONB filter: only count forms with products that have productCategory "Aura Edition" or "TKDN Product"
-    // Using PostgreSQL @> operator to check if form_data contains products with the specified categories
-    const productCategoryFilter = sequelize.literal(
-      `(form_data @> '[{"label": "products", "value": [{"productCategory": "Aura Edition"}]}]' OR ` +
-      `form_data @> '[{"label": "products", "value": [{"productCategory": "TKDN Product"}]}]')`
-    );
-
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
       attributes: [
@@ -1058,7 +1069,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
           [Op.gte]: startDate,
           [Op.lte]: endDate
         },
-        [Op.and]: [productCategoryFilter]
+        [Op.and]: [tkdnAuraProductCategoryFilter]
       },
       group: [sequelize.col('Form.user_id'), sequelize.col('user.user_id')],
       order: [[sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'DESC']],
@@ -1084,7 +1095,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
           [Op.gte]: startDate,
           [Op.lte]: endDate
         },
-        [Op.and]: [productCategoryFilter]
+        [Op.and]: [tkdnAuraProductCategoryFilter]
       },
       distinct: true,
       col: 'user_id'
