@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import dayjs from 'dayjs';
-import { Op, col } from 'sequelize';
+import { Op, col, Transaction } from 'sequelize';
 import ExcelJS from 'exceljs';
 
 import { Redemption } from '../../models/Redemption';
@@ -14,6 +14,45 @@ import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queu
 import { invalidateCacheByPrefix } from '../middleware/cache';
 import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
 
+const REDEEM_DUPLICATE_WINDOW_SECONDS = 5;
+
+const findLockedUser = (userId: number, transaction: Transaction) =>
+  User.findByPk(userId, {
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+
+const findLockedProduct = (productId: number, transaction: Transaction) =>
+  Product.findByPk(productId, {
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+
+const hasRecentActiveRedemption = async (
+  userId: number,
+  productId: number,
+  transaction: Transaction
+) => {
+  const recentThreshold = dayjs()
+    .subtract(REDEEM_DUPLICATE_WINDOW_SECONDS, 'second')
+    .toDate();
+
+  const recentRedemption = await Redemption.findOne({
+    where: {
+      user_id: userId,
+      product_id: productId,
+      status: 'active',
+      createdAt: {
+        [Op.gte]: recentThreshold,
+      },
+    },
+    transaction,
+    order: [['createdAt', 'DESC']],
+  });
+
+  return recentRedemption;
+};
+
 export const getRedemptionWindowStatus = async (req: CustomRequest, res: Response) => {
   try {
     const info = getRedemptionWindowInfo();
@@ -25,7 +64,7 @@ export const getRedemptionWindowStatus = async (req: CustomRequest, res: Respons
 };
 
 export const redeemPoint = async (req: CustomRequest, res: Response) => {
-  const { product_id, points_spent, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
+  const { product_id, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
   const user_id = req.user?.userId as number;
 
   if (!isRedemptionWindowOpen()) {
@@ -49,7 +88,6 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
         message: 'Missing required fields',
         errors: {
           product_id: !product_id ? 'Product ID is required' : null,
-          points_spent: !points_spent ? 'Points spent is required' : null,
           shipping_address: !shipping_address ? 'Shipping address is required' : null,
           fullname: !fullname ? 'Full name is required' : null,
           email: !email ? 'Email is required' : null,
@@ -59,27 +97,37 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       });
     }
 
-    // Check if user has enough points
-    const user = await User.findByPk(user_id, { transaction });
+    // Lock the user row first so concurrent redeems from the same account serialize.
+    const user = await findLockedUser(user_id, transaction);
     if (!user) {
       await transaction.rollback();
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if ((user.total_points || 0) < points_spent) {
+    // Lock the product row before checking stock to prevent overselling on concurrent redeems.
+    const product = await findLockedProduct(product_id, transaction);
+    if (!product) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    const requiredPoints = product.points_required || 0;
+
+    const recentRedemption = await hasRecentActiveRedemption(user_id, product_id, transaction);
+    if (recentRedemption) {
+      await transaction.rollback();
+      return res.status(429).json({
+        message: 'Duplicate redemption detected. Please wait before redeeming the same product again.',
+      });
+    }
+
+    if ((user.total_points || 0) < requiredPoints) {
       await transaction.rollback();
       return res.status(400).json({ 
         message: 'Insufficient points',
         current_points: user.total_points,
-        required_points: points_spent
+        required_points: requiredPoints
       });
-    }
-
-    // Check if product exists and has stock
-    const product = await Product.findByPk(product_id, { transaction });
-    if (!product) {
-      await transaction.rollback();
-      return res.status(404).json({ message: 'Product not found' });
     }
 
     if ((product.stock_quantity || 0) <= 0) {
@@ -91,7 +139,7 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     const redemption = await Redemption.create({
       user_id,
       product_id,
-      points_spent,
+      points_spent: requiredPoints,
       shipping_address,
       fullname,
       email,
@@ -104,14 +152,14 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     // Create point transaction record
     await PointTransaction.create({
       user_id: user.user_id,
-      points: -points_spent,
+      points: -requiredPoints,
       transaction_type: 'spend',
       redemption_id: redemption.redemption_id,
-      description: `Spent ${points_spent} points to redeem ${product.name}`
+      description: `Spent ${requiredPoints} points to redeem ${product.name}`
     }, { transaction });
 
     // Update user points
-    user.total_points = (user.total_points || 0) - points_spent;
+    user.total_points = (user.total_points || 0) - requiredPoints;
     await user.save({ transaction });
 
     // Update product stock
@@ -174,8 +222,8 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
   const transaction = await sequelize.transaction();
 
   try {
-    // Get user data from database
-    const user = await User.findByPk(user_id, { transaction });
+    // Lock the user row first so concurrent redeems from the same account serialize.
+    const user = await findLockedUser(user_id, transaction);
     if (!user) {
       await transaction.rollback();
       return res.status(404).json({ message: 'User not found' });
@@ -186,11 +234,19 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
     const email = user.email || '';
     const phone_number = user.phone_number || '';
 
-    // Get the product
-    const product = await Product.findByPk(product_id, { transaction });
+    // Lock the referral product before checking stock to prevent overselling.
+    const product = await findLockedProduct(product_id, transaction);
     if (!product) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Referral product not found' });
+    }
+
+    const recentRedemption = await hasRecentActiveRedemption(user_id, product_id, transaction);
+    if (recentRedemption) {
+      await transaction.rollback();
+      return res.status(429).json({
+        message: 'Duplicate redemption detected. Please wait before redeeming the same product again.',
+      });
     }
 
     // Check product stock
