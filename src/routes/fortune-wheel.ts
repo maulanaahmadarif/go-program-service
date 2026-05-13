@@ -1,5 +1,5 @@
 import express from 'express';
-import { spinWheel, checkEligibility, getFortuneWheelList, downloadFortuneWheelList } from '../controllers/fortune-wheel';
+import { spinWheel, claimFortuneWheelPrize, checkEligibility, getFortuneWheelConfig, getFortuneWheelList, downloadFortuneWheelList } from '../controllers/fortune-wheel';
 import authenticate from '../middleware/auth';
 import { cacheGet } from '../middleware/cache';
 import checkDomain from '../middleware/domain';
@@ -7,7 +7,9 @@ import checkDomain from '../middleware/domain';
 const router = express.Router();
 
 router.get('/check-eligibility', authenticate, checkEligibility);
+router.get('/config', authenticate, getFortuneWheelConfig);
 router.post('/spin', authenticate, checkDomain, spinWheel);
+router.post('/claim', authenticate, checkDomain, claimFortuneWheelPrize);
 router.get('/list', authenticate, cacheGet({ keyPrefix: 'cache:fortune-wheel:list', ttlSeconds: 30, includeUser: true }), getFortuneWheelList);
 router.get('/list/download', authenticate, downloadFortuneWheelList);
 

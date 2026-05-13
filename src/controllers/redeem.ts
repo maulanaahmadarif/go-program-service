@@ -13,6 +13,7 @@ import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types
 import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queues/emailQueue';
 import { invalidateCacheByPrefix } from '../middleware/cache';
 import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
+import { getStockAllocationAvailability, ProductStockFlowType } from '../services/productStockAllocation';
 
 const REDEEM_DUPLICATE_WINDOW_SECONDS = 5;
 
@@ -51,6 +52,10 @@ const hasRecentActiveRedemption = async (
   });
 
   return recentRedemption;
+};
+
+const getRedemptionFlowType = (notes?: string | null): ProductStockFlowType => {
+  return notes === 'Wheel Spin Voucher' ? 'spin_wheel' : 'redeem';
 };
 
 export const getRedemptionWindowStatus = async (req: CustomRequest, res: Response) => {
@@ -130,7 +135,18 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       });
     }
 
-    if ((product.stock_quantity || 0) <= 0) {
+    const redeemStock = await getStockAllocationAvailability(product_id, 'redeem', transaction);
+    if (redeemStock.allocation && redeemStock.availableStock <= 0) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Product is out of stock for redemption' });
+    }
+
+    if (!redeemStock.allocation && redeemStock.hasAnyAllocation) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Product is not allocated for redemption' });
+    }
+
+    if (!redeemStock.allocation && (product.stock_quantity || 0) <= 0) {
       await transaction.rollback();
       return res.status(400).json({ message: 'Product is out of stock' });
     }
@@ -162,9 +178,13 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     user.total_points = (user.total_points || 0) - requiredPoints;
     await user.save({ transaction });
 
-    // Update product stock
-    product.stock_quantity = (product.stock_quantity || 0) - 1;
-    await product.save({ transaction });
+    if (redeemStock.allocation) {
+      redeemStock.allocation.used_stock = (redeemStock.allocation.used_stock || 0) + 1;
+      await redeemStock.allocation.save({ transaction });
+    } else {
+      product.stock_quantity = (product.stock_quantity || 0) - 1;
+      await product.save({ transaction });
+    }
 
     // Create user action record
     await UserAction.create({
@@ -249,8 +269,18 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
       });
     }
 
-    // Check product stock
-    if ((product.stock_quantity || 0) <= 0) {
+    const redeemStock = await getStockAllocationAvailability(product_id, 'redeem', transaction);
+    if (redeemStock.allocation && redeemStock.availableStock <= 0) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Referral product is out of stock for redemption' });
+    }
+
+    if (!redeemStock.allocation && redeemStock.hasAnyAllocation) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Referral product is not allocated for redemption' });
+    }
+
+    if (!redeemStock.allocation && (product.stock_quantity || 0) <= 0) {
       await transaction.rollback();
       return res.status(400).json({ message: 'Referral product is out of stock' });
     }
@@ -269,9 +299,13 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
       status: 'active'
     }, { transaction });
 
-    // Update product stock
-    product.stock_quantity = (product.stock_quantity || 0) - 1;
-    await product.save({ transaction });
+    if (redeemStock.allocation) {
+      redeemStock.allocation.used_stock = (redeemStock.allocation.used_stock || 0) + 1;
+      await redeemStock.allocation.save({ transaction });
+    } else {
+      product.stock_quantity = (product.stock_quantity || 0) - 1;
+      await product.save({ transaction });
+    }
 
     // Create user action record
     await UserAction.create({
@@ -665,7 +699,7 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
     // Step 1: Get redemption data first, then get related data in parallel
     const redeemDetail = await Redemption.findByPk(redemption_id, { 
       transaction,
-      attributes: ['redemption_id', 'user_id', 'product_id', 'points_spent', 'email', 'status']
+      attributes: ['redemption_id', 'user_id', 'product_id', 'points_spent', 'email', 'status', 'notes']
     });
 
     if (!redeemDetail) {
@@ -705,30 +739,34 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       description: `Returned ${redeemDetail.points_spent} points from rejected redemption of ${productDetail.name}`
     }, { transaction });
 
-    // Step 3: Update all entities in parallel using atomic operations
-    await Promise.all([
-      // Update redemption status
-      Redemption.update(
-        { status: 'rejected' },
-        { where: { redemption_id }, transaction }
-      ),
-      // Update user points atomically
-      User.update({
-        total_points: sequelize.literal(`total_points + ${redeemDetail.points_spent}`),
-        accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${redeemDetail.points_spent}`),
-        lifetime_total_points: sequelize.literal(`lifetime_total_points + ${redeemDetail.points_spent}`)
-      }, {
-        where: { user_id: user.user_id },
-        transaction
-      }),
-      // Update product stock atomically
-      Product.update({
+    await Redemption.update(
+      { status: 'rejected' },
+      { where: { redemption_id }, transaction }
+    );
+
+    await User.update({
+      total_points: sequelize.literal(`total_points + ${redeemDetail.points_spent}`),
+      accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${redeemDetail.points_spent}`),
+      lifetime_total_points: sequelize.literal(`lifetime_total_points + ${redeemDetail.points_spent}`)
+    }, {
+      where: { user_id: user.user_id },
+      transaction
+    });
+
+    const flowType = getRedemptionFlowType(redeemDetail.notes);
+    const stockAllocation = await getStockAllocationAvailability(productDetail.product_id, flowType, transaction);
+
+    if (stockAllocation.allocation) {
+      stockAllocation.allocation.used_stock = Math.max(0, (stockAllocation.allocation.used_stock || 0) - 1);
+      await stockAllocation.allocation.save({ transaction });
+    } else {
+      await Product.update({
         stock_quantity: sequelize.literal(`stock_quantity + 1`)
       }, {
         where: { product_id: productDetail.product_id },
         transaction
-      })
-    ]);
+      });
+    }
 
     // Step 4: Commit transaction first
     await transaction.commit();

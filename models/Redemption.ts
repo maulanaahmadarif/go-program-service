@@ -30,6 +30,7 @@ export interface RedemptionAttributes {
   user_id: number;
   product_id: number;
   points_spent: number;
+  coins_spent?: number;
   fullname: string;
   email: string;
   status: string;
@@ -65,6 +66,11 @@ export class Redemption extends Model<RedemptionAttributes, RedemptionCreationAt
   @AllowNull(false)
   @Column(DataType.INTEGER)
   public points_spent!: number;
+
+  @AllowNull(true)
+  @Default(0)
+  @Column(DataType.INTEGER)
+  public coins_spent?: number;
 
   @AllowNull(false)
   @Column(DataType.STRING(255))

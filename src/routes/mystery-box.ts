@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get("/check-eligibility", authenticate, checkEligibility);
 router.get("/list", authenticate, getMysteryBoxList);
-router.put("/update", authenticate, checkDomain, updateMysteryBox);
+router.put("/update", authenticate, updateMysteryBox);
 
 export default router;
 

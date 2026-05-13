@@ -1,4 +1,6 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { Op } from 'sequelize';
 
 import { sequelize } from '../db';
@@ -11,6 +13,10 @@ import { PointTransaction } from '../../models/PointTransaction';
 import { Project } from '../../models/Project';
 import { User } from '../../models/User';
 import { UserAction } from '../../models/UserAction';
+import { REDEMPTION_TIMEZONE } from './redemptionWindow';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export class ModerationError extends Error {
   status: number;
@@ -32,8 +38,11 @@ export interface ApproveFormResult {
   form_type_4_milestone_bonus: number;
 }
 
-const type4StartDate = new Date('2026-02-11T00:00:00.000Z');
-const type4EndDate = new Date('2026-03-20T23:59:59.999Z');
+/** Form type 4 milestone window in REDEMPTION_TIMEZONE (default Asia/Jakarta): 2026-05-13 start through 2026-06-20 EOD */
+const type4StartDate = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
+/** Shared campaign end: inclusive through end of 2026-06-20 in Jakarta (completion bonus + type 4 window). */
+const CAMPAIGN_END_JAKARTA = dayjs.tz('2026-06-20', REDEMPTION_TIMEZONE).endOf('day');
+const type4EndDate = CAMPAIGN_END_JAKARTA.toDate();
 
 const getDerivedProductQuantity = (formData: unknown): number => {
   if (!Array.isArray(formData)) return 0;
@@ -85,9 +94,10 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
     }
 
     const updatedForm = updatedForms[0];
-    const formSubmittedAt = dayjs(updatedForm.createdAt);
-    const targetDate = dayjs('2026-03-20');
-    const needsCompletionCount = formSubmittedAt.isBefore(targetDate);
+    const formSubmittedAtJakarta = dayjs(updatedForm.createdAt).tz(REDEMPTION_TIMEZONE);
+    /** 200pt completion bonus when the form was submitted on or before 2026-06-20 EOD in REDEMPTION_TIMEZONE (Jakarta). */
+    const eligibleForCompletionBonus =
+      formSubmittedAtJakarta.valueOf() <= CAMPAIGN_END_JAKARTA.valueOf();
 
     const [user, formType, project, approvedSubmissionsCount] = await Promise.all([
       User.findByPk(updatedForm.user_id, {
@@ -102,7 +112,7 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
         transaction,
         attributes: ['project_id', 'name'],
       }),
-      needsCompletionCount
+      eligibleForCompletionBonus
         ? Form.count({
             where: {
               user_id: updatedForm.user_id,
@@ -121,7 +131,7 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
     const { isAuraEdition, customerTypeBonus } = parseFormDataFlags(updatedForm.form_data);
     const effectiveProductQuantity = getDerivedProductQuantity(updatedForm.form_data);
     const additionalPoint = calculateBonusPoints(updatedForm.form_type_id, effectiveProductQuantity, isAuraEdition);
-    const completionBonus = needsCompletionCount && approvedSubmissionsCount === 4 ? 200 : 0;
+    const completionBonus = eligibleForCompletionBonus && approvedSubmissionsCount === 4 ? 200 : 0;
 
     const basePoints = formType.point_reward;
     const totalPoints = basePoints + additionalPoint + completionBonus + customerTypeBonus;

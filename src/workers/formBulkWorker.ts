@@ -75,6 +75,7 @@ const processApproveBulkJob = async (job: Job<BulkApproveJobData>) => {
 
   if (successCount > 0) {
     await invalidateCacheByPrefix('cache:form:submission');
+    await invalidateCacheByPrefix('cache:project:list');
   }
 
   return {
@@ -126,6 +127,7 @@ const processRejectBulkJob = async (job: Job<BulkRejectJobData>) => {
 
   if (successCount > 0) {
     await invalidateCacheByPrefix('cache:form:submission');
+    await invalidateCacheByPrefix('cache:project:list');
   }
 
   return {

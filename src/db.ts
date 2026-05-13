@@ -15,6 +15,10 @@ import { RefreshToken } from "../models/RefreshToken";
 import { FortuneWheelSpin } from "../models/FortuneWheelSpin";
 import { UserMysteryBox } from "../models/UserMysteryBox";
 import { ExistingCustomer } from "../models/ExistingCustomer";
+import { ProductStockAllocation } from "../models/ProductStockAllocation";
+import { DailyCheckin } from "../models/DailyCheckin";
+import { DailyCheckinRewardTier } from "../models/DailyCheckinRewardTier";
+import { CoinTransaction } from "../models/CoinTransaction";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -41,6 +45,10 @@ export const sequelize = new Sequelize({
 		FortuneWheelSpin,
 		UserMysteryBox,
 		ExistingCustomer,
+		ProductStockAllocation,
+		DailyCheckin,
+		DailyCheckinRewardTier,
+		CoinTransaction,
 	],
 	dialect: dbConfig.dialect,
 });

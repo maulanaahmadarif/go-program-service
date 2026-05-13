@@ -18,14 +18,17 @@ import { Optional } from "sequelize";
 import { Redemption } from './Redemption';  // Adjust paths based on your project structure
 import { FortuneWheelSpin } from './FortuneWheelSpin';
 import { UserMysteryBox } from './UserMysteryBox';
+import { ProductStockAllocation } from './ProductStockAllocation';
 
 export interface ProductTypeAttributes {
   product_id?: number;
   name: string;
   description: string;
   points_required: number;
+  coins_required?: number;
   stock_quantity: number;
   image_url?: string;
+  currency_type?: string;
   size?: string[];
   category: string;
   is_active: boolean;
@@ -57,6 +60,12 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
   @Column(DataType.INTEGER)
   public points_required!: number;
 
+  @AllowNull(true)
+  @Default(0)
+  @Validate({ min: 0 })
+  @Column(DataType.INTEGER)
+  public coins_required?: number;
+
   @AllowNull(false)
   @Validate({ min: 0 })
   @Column(DataType.INTEGER)
@@ -74,6 +83,20 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
   @AllowNull(true)
   @Column(DataType.STRING(100))
   public category?: string;
+
+  /**
+   * Catalog surfaces:
+   * - `point` — listed on points redeem page (`points_redemption=1`); not coin-exclusive daily-check-in rewards.
+   * - `coin` — coin redemption only (daily-check-in / `coin_redemption=1` whitelist); hidden from points redeem list.
+   * - `both` — eligible for both points and coin flows when prices are set.
+   *
+   * Stock: for split pools create two `product_stock_allocations` rows — `flow_type: 'redeem'` (points) and
+   * `'coin'` (coins). With no allocation rows, `stock_quantity` on this table is a single shared pool.
+   */
+  @AllowNull(true)
+  @Default('point')
+  @Column(DataType.ENUM('point', 'coin', 'both'))
+  public currency_type?: string;
 
   @AllowNull(false)
   @Default(true)
@@ -96,6 +119,9 @@ export class Product extends Model<ProductTypeAttributes, ProductCreationAttribu
 
   @HasMany(() => UserMysteryBox)
   user_mystery_boxes!: UserMysteryBox[];
+
+  @HasMany(() => ProductStockAllocation)
+  stock_allocations!: ProductStockAllocation[];
 
   // static associate(models: any) {
   //   Product.hasMany(models.Redemption, { foreignKey: 'product_id' });

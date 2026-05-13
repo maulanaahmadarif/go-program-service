@@ -12,6 +12,8 @@ import detailsRoutes from './details';
 import fortuneWheelRoutes from './fortune-wheel';
 import mysteryBoxRoutes from './mystery-box';
 import healthRoutes from './health';
+import dailyCheckinRoutes from './daily-checkin';
+import coinRoutes from './coin';
 
 const router = express.Router();
 
@@ -30,5 +32,7 @@ router.use('/point', redeemRoutes);
 router.use('/details', detailsRoutes);
 router.use('/fortune-wheel', fortuneWheelRoutes);
 router.use('/mystery-box', mysteryBoxRoutes);
+router.use('/daily-checkin', dailyCheckinRoutes);
+router.use('/coin', coinRoutes);
 
 export default router;

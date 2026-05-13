@@ -1,14 +1,145 @@
 import { Response } from "express";
 import { Op } from "sequelize";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import ExcelJS from "exceljs";
 import { sequelize } from "../db";
 import { User } from "../../models/User";
 import { Product } from "../../models/Product";
 import { Company } from "../../models/Company";
 import { FortuneWheelSpin } from "../../models/FortuneWheelSpin";
+import { PointTransaction } from "../../models/PointTransaction";
+import { Redemption } from "../../models/Redemption";
+import { UserAction } from "../../models/UserAction";
 import { getUserType } from "../utils";
 import { CustomRequest } from "../types/api";
+import { getProductFlowAvailableStock, getStockAllocationAvailability } from "../services/productStockAllocation";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const SPIN_START_TZ = "Asia/Jakarta";
+/** Spins on or after this instant count toward MAX_SPINS (start of 2026-05-13 in Jakarta / WIB). */
+const SPIN_START_DATE = dayjs.tz("2026-05-13 00:00:00", SPIN_START_TZ).toDate();
+const MAX_SPINS = 2;
+const WHEEL_PRODUCT_ID = 28;
+
+type WheelPrizeType = 'try_again' | 'points' | 'product';
+
+type WheelSegment = {
+	code: string;
+	option: string;
+	type: WheelPrizeType;
+	product_id: number | null;
+	product_name?: string;
+	points_reward: number;
+};
+
+const TRY_AGAIN_SEGMENT: WheelSegment = {
+	code: 'TRY_AGAIN',
+	option: 'Try Again',
+	type: 'try_again',
+	product_id: null,
+	points_reward: 0
+};
+
+const POINTS_SEGMENT: WheelSegment = {
+	code: 'POINTS_100',
+	option: 'Additional 100 Points',
+	type: 'points',
+	product_id: null,
+	points_reward: 100
+};
+
+const WHEEL_PATTERN: WheelPrizeType[] = [
+	'try_again',
+	'product',
+	'try_again',
+	'points',
+	'try_again',
+	'points',
+	'product',
+	'points',
+	'try_again',
+	'points'
+];
+
+const getSpinCount = (userId: number, transaction?: any) =>
+	FortuneWheelSpin.count({
+		where: {
+			user_id: userId,
+			createdAt: {
+				[Op.gte]: SPIN_START_DATE
+			}
+		},
+		transaction
+	});
+
+const getWheelProducts = async (transaction?: any) => {
+	const product = await Product.findByPk(WHEEL_PRODUCT_ID, {
+		transaction,
+		lock: transaction ? transaction.LOCK.UPDATE : undefined
+	});
+
+	if (!product) return [];
+
+	if (transaction) {
+		const stock = await getStockAllocationAvailability(product.product_id, 'spin_wheel', transaction);
+		if (stock.allocation) {
+			return stock.availableStock > 0 ? [product] : [];
+		}
+
+		return !stock.hasAnyAllocation && (product.stock_quantity || 0) > 0 ? [product] : [];
+	}
+
+	const spinWheelAvailableStock = await getProductFlowAvailableStock(product.product_id, 'spin_wheel');
+	if (spinWheelAvailableStock !== null) {
+		return spinWheelAvailableStock > 0 ? [product] : [];
+	}
+
+	return (product.stock_quantity || 0) > 0 ? [product] : [];
+};
+
+const buildWheelSegments = (products: Product[]): WheelSegment[] => {
+	const productSegments = products.map((product) => ({
+		code: `PRODUCT_${product.product_id}`,
+		option: product.name,
+		type: 'product' as WheelPrizeType,
+		product_id: product.product_id,
+		product_name: product.name,
+		points_reward: 0
+	}));
+
+	return WHEEL_PATTERN.map((type, index) => {
+		if (type === 'product') {
+			if (productSegments.length === 0) {
+				return {
+					...POINTS_SEGMENT,
+					code: `${POINTS_SEGMENT.code}_${index}`,
+				};
+			}
+
+			const productSegment = productSegments[0];
+			return {
+				...productSegment,
+				code: `${productSegment.code}_${index}`,
+			};
+		}
+
+		if (type === 'points') {
+			return {
+				...POINTS_SEGMENT,
+				code: `${POINTS_SEGMENT.code}_${index}`,
+			};
+		}
+
+		return {
+			...TRY_AGAIN_SEGMENT,
+			code: `${TRY_AGAIN_SEGMENT.code}_${index}`,
+		};
+	});
+};
 
 export const checkEligibility = async (req: CustomRequest, res: Response) => {
 	try {
@@ -20,17 +151,7 @@ export const checkEligibility = async (req: CustomRequest, res: Response) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// Check total spins since August 20, 2025
-		const spinCount = await FortuneWheelSpin.count({
-			where: {
-				user_id: userId,
-				createdAt: {
-					[Op.gte]: new Date('2026-02-11T00:00:00.000Z')
-				}
-			}
-		});
-
-		const MAX_SPINS = 2;
+		const spinCount = await getSpinCount(userId as number);
 		const isEligible = spinCount < MAX_SPINS;
 		const spinsRemaining = Math.max(0, MAX_SPINS - spinCount);
 
@@ -45,6 +166,36 @@ export const checkEligibility = async (req: CustomRequest, res: Response) => {
 	}
 };
 
+export const getFortuneWheelConfig = async (req: CustomRequest, res: Response) => {
+	try {
+		const userId = req.user?.userId;
+		if (!userId) {
+			return res.status(401).json({ message: "Unauthorized" });
+		}
+
+		const user = await User.findByPk(userId);
+		if (!user) {
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		const [spinCount, products] = await Promise.all([
+			getSpinCount(userId),
+			getWheelProducts()
+		]);
+
+		const spinsRemaining = Math.max(0, MAX_SPINS - spinCount);
+
+		res.status(200).json({
+			eligible: spinCount < MAX_SPINS,
+			spins_remaining: spinsRemaining,
+			segments: buildWheelSegments(products)
+		});
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error getting fortune wheel config");
+		res.status(500).json({ message: "Something went wrong" });
+	}
+};
+
 export const spinWheel = async (req: CustomRequest, res: Response) => {
 	const transaction = await sequelize.transaction();
 	try {
@@ -52,12 +203,6 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 		if (!userId) {
 			await transaction.rollback();
 			return res.status(401).json({ message: "Unauthorized" });
-		}
-		const { product_id, prize_name, is_redeemed = false } = req.body;
-
-		if (!prize_name) {
-			await transaction.rollback();
-			return res.status(400).json({ message: "Prize name is required" });
 		}
 
 		// Find user
@@ -67,18 +212,7 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// Check total spins limit since August 20, 2025
-		const spinCount = await FortuneWheelSpin.count({
-			where: {
-				user_id: userId,
-				createdAt: {
-					[Op.gte]: new Date('2026-02-11T00:00:00.000Z')
-				}
-			},
-			transaction
-		});
-
-		const MAX_SPINS = 2;
+		const spinCount = await getSpinCount(userId, transaction);
 		if (spinCount >= MAX_SPINS) {
 			await transaction.rollback();
 			return res.status(400).json({ 
@@ -87,23 +221,68 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 			});
 		}
 
-		let product = null;
-		// Validate product exists and has stock only if product_id is provided
-		if (product_id) {
-			product = await Product.findByPk(product_id, { transaction });
-			if (!product || product.stock_quantity <= 0) {
+		const products = await getWheelProducts(transaction);
+		const segments = buildWheelSegments(products);
+		const resultIndex = Math.floor(Math.random() * segments.length);
+		const selectedSegment = segments[resultIndex];
+		const isRedeemed = selectedSegment.type !== 'product';
+
+		let product: Product | null = null;
+		let stockAllocation: Awaited<ReturnType<typeof getStockAllocationAvailability>> | null = null;
+		if (selectedSegment.product_id) {
+			product = products.find((item) => item.product_id === selectedSegment.product_id) || null;
+
+			if (!product) {
 				await transaction.rollback();
 				return res.status(400).json({ message: "Invalid or out of stock product" });
 			}
+
+			stockAllocation = await getStockAllocationAvailability(product.product_id, 'spin_wheel', transaction);
+			if (stockAllocation.allocation && stockAllocation.availableStock <= 0) {
+				await transaction.rollback();
+				return res.status(400).json({ message: "Product is out of stock for Spin Wheel" });
+			}
+
+			if (!stockAllocation.allocation && stockAllocation.hasAnyAllocation) {
+				await transaction.rollback();
+				return res.status(400).json({ message: "Product is not allocated for Spin Wheel" });
+			}
+
+			if (!stockAllocation.allocation && (product.stock_quantity || 0) <= 0) {
+				await transaction.rollback();
+				return res.status(400).json({ message: "Invalid or out of stock product" });
+			}
+
+			if (stockAllocation.allocation) {
+				stockAllocation.allocation.reserved_stock = (stockAllocation.allocation.reserved_stock || 0) + 1;
+				await stockAllocation.allocation.save({ transaction });
+			} else {
+				product.stock_quantity = (product.stock_quantity || 0) - 1;
+				await product.save({ transaction });
+			}
+		}
+
+		if (selectedSegment.type === 'points' && selectedSegment.points_reward > 0) {
+			user.total_points = (user.total_points || 0) + selectedSegment.points_reward;
+			user.accomplishment_total_points = (user.accomplishment_total_points || 0) + selectedSegment.points_reward;
+			user.lifetime_total_points = (user.lifetime_total_points || 0) + selectedSegment.points_reward;
+			await user.save({ transaction });
+
+			await PointTransaction.create({
+				user_id: userId,
+				points: selectedSegment.points_reward,
+				transaction_type: 'earn',
+				description: `Earned ${selectedSegment.points_reward} points from Fortune Wheel`
+			}, { transaction });
 		}
 
 		// Create spin record
 		const spin = await FortuneWheelSpin.create({
 			user_id: userId,
-			product_id: product_id || null,
-			prize_name,
+			product_id: selectedSegment.product_id,
+			prize_name: selectedSegment.option,
 			status: 'COMPLETED',
-			is_redeemed
+			is_redeemed: isRedeemed
 		}, { transaction });
 
 		await transaction.commit();
@@ -112,13 +291,19 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 		res.status(200).json({
 			message: "Fortune wheel spin successful",
 			spins_remaining: MAX_SPINS - (spinCount + 1),
+			result_index: resultIndex,
+			segments,
 			spin_result: {
 				spin_id: spin.spin_id,
 				product_id: spin.product_id,
 				product_name: product?.name,
 				prize_name: spin.prize_name,
 				points_required: product?.points_required,
-				is_redeemed,
+				points_reward: selectedSegment.points_reward,
+				type: selectedSegment.type,
+				code: selectedSegment.code,
+				is_redeemed: isRedeemed,
+				requires_redeem_form: selectedSegment.type === 'product',
 				timestamp: spin.createdAt
 			}
 		});
@@ -126,6 +311,117 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 	} catch (error: any) {
 		await transaction.rollback();
 		req.log.error({ error, stack: error.stack }, "Error in fortune wheel spin");
+		res.status(500).json({ message: "Something went wrong" });
+	}
+};
+
+export const claimFortuneWheelPrize = async (req: CustomRequest, res: Response) => {
+	const transaction = await sequelize.transaction();
+	try {
+		const userId = req.user?.userId;
+		if (!userId) {
+			await transaction.rollback();
+			return res.status(401).json({ message: "Unauthorized" });
+		}
+
+		const { spin_id, fullname, email, phone_number, shipping_address = 'voucher', postal_code = 'voucher' } = req.body;
+		if (!spin_id || !fullname || !email || !phone_number) {
+			await transaction.rollback();
+			return res.status(400).json({
+				message: 'Missing required fields',
+				errors: {
+					spin_id: !spin_id ? 'Spin ID is required' : null,
+					fullname: !fullname ? 'Full name is required' : null,
+					email: !email ? 'Email is required' : null,
+					phone_number: !phone_number ? 'Phone number is required' : null,
+				}
+			});
+		}
+
+		const user = await User.findByPk(userId, {
+			transaction,
+			lock: transaction.LOCK.UPDATE
+		});
+
+		if (!user) {
+			await transaction.rollback();
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		const spin = await FortuneWheelSpin.findOne({
+			where: {
+				spin_id,
+				user_id: userId,
+				status: 'COMPLETED',
+				is_redeemed: false,
+				product_id: {
+					[Op.ne]: null
+				}
+			},
+			transaction,
+			lock: transaction.LOCK.UPDATE
+		});
+
+		if (!spin || !spin.product_id) {
+			await transaction.rollback();
+			return res.status(404).json({ message: "Claimable Spin Wheel prize not found" });
+		}
+
+		const product = await Product.findByPk(spin.product_id, {
+			transaction,
+			lock: transaction.LOCK.UPDATE
+		});
+
+		if (!product) {
+			await transaction.rollback();
+			return res.status(404).json({ message: "Product not found" });
+		}
+
+		const stockAllocation = await getStockAllocationAvailability(product.product_id, 'spin_wheel', transaction);
+		if (stockAllocation.allocation) {
+			if ((stockAllocation.allocation.reserved_stock || 0) <= 0) {
+				await transaction.rollback();
+				return res.status(400).json({ message: "No reserved Spin Wheel stock found for this prize" });
+			}
+
+			stockAllocation.allocation.reserved_stock = Math.max(0, (stockAllocation.allocation.reserved_stock || 0) - 1);
+			stockAllocation.allocation.used_stock = (stockAllocation.allocation.used_stock || 0) + 1;
+			await stockAllocation.allocation.save({ transaction });
+		}
+
+		const redemption = await Redemption.create({
+			user_id: userId,
+			product_id: product.product_id,
+			points_spent: 0,
+			shipping_address,
+			fullname,
+			email,
+			phone_number,
+			postal_code,
+			notes: 'Wheel Spin Voucher',
+			status: 'active'
+		}, { transaction });
+
+		spin.is_redeemed = true;
+		await spin.save({ transaction });
+
+		await UserAction.create({
+			user_id: userId,
+			entity_type: 'REDEEM',
+			action_type: req.method,
+			redemption_id: redemption.redemption_id,
+		}, { transaction });
+
+		await transaction.commit();
+
+		res.status(200).json({
+			message: 'Spin Wheel prize claim submitted',
+			redemption_id: redemption.redemption_id,
+			status: 200
+		});
+	} catch (error: any) {
+		await transaction.rollback();
+		req.log.error({ error, stack: error.stack }, "Error claiming fortune wheel prize");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };

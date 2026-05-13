@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { Op, QueryTypes, fn, col, where } from "sequelize";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import ExcelJS from "exceljs";
 
 import { User } from "../../models/User";
@@ -19,6 +21,34 @@ import { UserAction } from "../../models/UserAction";
 import { Form } from "../../models/Form";
 import { CustomRequest } from "../types/api";
 import { enqueuePasswordResetEmail, enqueueSignupConfirmationEmail, enqueueWelcomeEmail } from "../queues/emailQueue";
+import { Product } from "../../models/Product";
+import { getProductFlowAvailableStock, getStockAllocationAvailability } from "../services/productStockAllocation";
+
+/** One-time points granted when a customer completes self-service registration (`userSignup`). */
+const SIGNUP_WELCOME_POINTS = 400;
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+/** Blitz window uses Asia/Jakarta (WIB) wall clock; not tied to REDEMPTION_TIMEZONE env. */
+const BLITZ_KICK_OFF_TZ = "Asia/Jakarta";
+
+const BLITZ_KICK_OFF_PRODUCT_ID = 23;
+const BLITZ_KICK_OFF_NOTE = "Blitz Kick-Off";
+/** Inclusive of full local day 2026-05-15: [2026-05-15 00:00, 2026-05-16 00:00) in Jakarta */
+const BLITZ_KICK_OFF_START = dayjs.tz("2026-05-15 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_END = dayjs.tz("2026-05-16 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+
+/** Approved-form counts: from start of 2026-05-13 in Asia/Jakarta (not UTC midnight on the 13th). */
+const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-05-13 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+
+const isBlitzKickOffWindowOpen = (date = new Date()) => {
+	return date >= BLITZ_KICK_OFF_START && date < BLITZ_KICK_OFF_END;
+};
+
+const isBlitzKickOffNewUser = (user: User) => {
+	return user.createdAt >= BLITZ_KICK_OFF_START && user.createdAt < BLITZ_KICK_OFF_END;
+};
 
 export const userLogin = async (req: CustomRequest, res: Response) => {
 	const { email, password, level = "CUSTOMER" } = req.body;
@@ -77,6 +107,7 @@ export const userLogin = async (req: CustomRequest, res: Response) => {
 			program_saled_id: user.program_saled_id,
 			job: user.job_title,
 			username: user.username,
+			fullname: user.fullname ?? "",
 			user_point: user.total_points,
 			phone_number: user.phone_number,
 			user_type: user.user_type,
@@ -231,8 +262,9 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				program_saled_id: "",
 				phone_number,
 				job_title,
-				total_points: 0,
-				accomplishment_total_points: 0,
+				total_points: SIGNUP_WELCOME_POINTS,
+				accomplishment_total_points: SIGNUP_WELCOME_POINTS,
+				lifetime_total_points: SIGNUP_WELCOME_POINTS,
 				fullname,
 				referral_code: newReferralCode,
 				referred_by: referrerId,
@@ -245,6 +277,26 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				purpose: "EMAIL_CONFIRMATION",
 				expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
 			}, { transaction });
+
+			const pointTx = await PointTransaction.create(
+				{
+					user_id: user.user_id,
+					points: SIGNUP_WELCOME_POINTS,
+					transaction_type: "earn",
+					description: `Welcome bonus: ${SIGNUP_WELCOME_POINTS} points for new account registration`,
+				},
+				{ transaction }
+			);
+
+			await UserAction.create(
+				{
+					user_id: user.user_id,
+					entity_type: "FORM",
+					action_type: "SIGNUP_WELCOME",
+					note: `Earned ${SIGNUP_WELCOME_POINTS} welcome points for new account registration (point_transaction_id: ${pointTx.transaction_id})`,
+				},
+				{ transaction }
+			);
 
 			await transaction.commit();
 
@@ -338,7 +390,7 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 				user_id: user.user_id,
 				status: 'approved',
 				createdAt: {
-					[Op.gte]: new Date('2026-02-11T00:00:00.000Z')
+					[Op.gte]: APPROVED_FORMS_COUNT_FROM
 				}
 			}
 		});
@@ -629,6 +681,186 @@ export const userSignupConfirmation = async (req: CustomRequest, res: Response) 
 		res.status(200).json({ message: "Email confirmed successfully" });
 	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error confirming email");
+		res.status(500).json({ message: "Something went wrong" });
+	}
+};
+
+export const getBlitzKickOffEligibility = async (req: CustomRequest, res: Response) => {
+	try {
+		const userId = req.user?.userId;
+		if (!userId) {
+			return res.status(401).json({ message: "Unauthorized" });
+		}
+
+		const user = await User.findByPk(userId);
+		if (!user) {
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		if (!isBlitzKickOffWindowOpen()) {
+			return res.status(200).json({
+				eligible: false,
+				reason: "Blitz Kick-Off is not active",
+			});
+		}
+
+		if (!isBlitzKickOffNewUser(user)) {
+			return res.status(200).json({
+				eligible: false,
+				reason: "User is not registered during Blitz Kick-Off period",
+			});
+		}
+
+		const existingClaim = await Redemption.findOne({
+			where: {
+				user_id: userId,
+				product_id: BLITZ_KICK_OFF_PRODUCT_ID,
+				notes: BLITZ_KICK_OFF_NOTE,
+				status: {
+					[Op.ne]: 'rejected',
+				},
+			},
+		});
+
+		if (existingClaim) {
+			return res.status(200).json({
+				eligible: false,
+				reason: "Blitz Kick-Off voucher has already been claimed",
+			});
+		}
+
+		const product = await Product.findByPk(BLITZ_KICK_OFF_PRODUCT_ID);
+		const availableStock = product
+			? await getProductFlowAvailableStock(BLITZ_KICK_OFF_PRODUCT_ID, 'signup')
+			: null;
+
+		res.status(200).json({
+			eligible: (availableStock ?? 0) > 0,
+			product_id: BLITZ_KICK_OFF_PRODUCT_ID,
+			product_name: product?.name || "MAP E-Voucher IDR 50.000",
+			available_stock: availableStock ?? 0,
+			reason: (availableStock ?? 0) > 0 ? null : "Blitz Kick-Off voucher is out of stock",
+		});
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, "Error checking Blitz Kick-Off eligibility");
+		res.status(500).json({ message: "Something went wrong" });
+	}
+};
+
+export const claimBlitzKickOffVoucher = async (req: CustomRequest, res: Response) => {
+	const transaction = await sequelize.transaction();
+	try {
+		const userId = req.user?.userId;
+		if (!userId) {
+			await transaction.rollback();
+			return res.status(401).json({ message: "Unauthorized" });
+		}
+
+		const { fullname, email, phone_number, shipping_address = 'voucher', postal_code = 'voucher' } = req.body;
+		if (!fullname || !email || !phone_number) {
+			await transaction.rollback();
+			return res.status(400).json({
+				message: "Missing required fields",
+				errors: {
+					fullname: !fullname ? "Full name is required" : null,
+					email: !email ? "Email is required" : null,
+					phone_number: !phone_number ? "Phone number is required" : null,
+				}
+			});
+		}
+
+		if (!isBlitzKickOffWindowOpen()) {
+			await transaction.rollback();
+			return res.status(400).json({ message: "Blitz Kick-Off is not active" });
+		}
+
+		const user = await User.findByPk(userId, {
+			transaction,
+			lock: transaction.LOCK.UPDATE,
+		});
+
+		if (!user) {
+			await transaction.rollback();
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		if (!isBlitzKickOffNewUser(user)) {
+			await transaction.rollback();
+			return res.status(400).json({ message: "User is not eligible for Blitz Kick-Off voucher" });
+		}
+
+		const existingClaim = await Redemption.findOne({
+			where: {
+				user_id: userId,
+				product_id: BLITZ_KICK_OFF_PRODUCT_ID,
+				notes: BLITZ_KICK_OFF_NOTE,
+				status: {
+					[Op.ne]: 'rejected',
+				},
+			},
+			transaction,
+			lock: transaction.LOCK.UPDATE,
+		});
+
+		if (existingClaim) {
+			await transaction.rollback();
+			return res.status(400).json({ message: "Blitz Kick-Off voucher has already been claimed" });
+		}
+
+		const product = await Product.findByPk(BLITZ_KICK_OFF_PRODUCT_ID, {
+			transaction,
+			lock: transaction.LOCK.UPDATE,
+		});
+
+		if (!product) {
+			await transaction.rollback();
+			return res.status(404).json({ message: "Blitz Kick-Off product not found" });
+		}
+
+		const stock = await getStockAllocationAvailability(BLITZ_KICK_OFF_PRODUCT_ID, 'signup', transaction);
+		if (!stock.allocation) {
+			await transaction.rollback();
+			return res.status(400).json({ message: "Blitz Kick-Off product is not allocated for signup flow" });
+		}
+
+		if (stock.availableStock <= 0) {
+			await transaction.rollback();
+			return res.status(400).json({ message: "Blitz Kick-Off voucher is out of stock" });
+		}
+
+		stock.allocation.used_stock = (stock.allocation.used_stock || 0) + 1;
+		await stock.allocation.save({ transaction });
+
+		const redemption = await Redemption.create({
+			user_id: userId,
+			product_id: product.product_id,
+			points_spent: 0,
+			fullname,
+			email,
+			phone_number,
+			shipping_address,
+			postal_code,
+			notes: BLITZ_KICK_OFF_NOTE,
+			status: 'active',
+		}, { transaction });
+
+		await UserAction.create({
+			user_id: userId,
+			entity_type: 'REDEEM',
+			action_type: req.method,
+			redemption_id: redemption.redemption_id,
+		}, { transaction });
+
+		await transaction.commit();
+
+		res.status(200).json({
+			message: "Blitz Kick-Off voucher claim submitted",
+			redemption_id: redemption.redemption_id,
+			status: 200,
+		});
+	} catch (error: any) {
+		await transaction.rollback();
+		req.log.error({ error, stack: error.stack }, "Error claiming Blitz Kick-Off voucher");
 		res.status(500).json({ message: "Something went wrong" });
 	}
 };
@@ -1144,7 +1376,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
-						AND referred.created_at >= '2026-02-11T00:00:00.000Z'
+						AND referred.created_at >= '2026-05-13T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1163,7 +1395,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-02-11T00:00:00.000Z'
+				AND referred.created_at >= '2026-05-13T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1174,7 +1406,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-02-11T00:00:00.000Z'
+				AND referred.created_at >= '2026-05-13T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1219,7 +1451,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
-							AND referred.created_at >= '2026-02-11T00:00:00.000Z'
+							AND referred.created_at >= '2026-05-13T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 

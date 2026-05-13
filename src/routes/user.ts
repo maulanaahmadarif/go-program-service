@@ -21,6 +21,8 @@ import {
   getUsersWhoUsedReferral,
   getUsersWithUsedReferralCodes,
   downloadUsersWhoUsedReferral,
+  getBlitzKickOffEligibility,
+  claimBlitzKickOffVoucher,
 } from "../controllers/user";
 import authenticate from "../middleware/auth";
 import { cacheGet } from "../middleware/cache";
@@ -28,10 +30,12 @@ import checkEmailDomain from "../middleware/emailDomain";
 
 const router = express.Router();
 
-router.post("/login", userLogin);
+router.post("/login", checkEmailDomain, userLogin);
 router.post("/signup", checkEmailDomain, userSignup);
 // router.post('/add-internal-user', addInternalUser)
 router.get("/profile", authenticate, getUserProfile);
+router.get("/blitz-kickoff/eligibility", authenticate, getBlitzKickOffEligibility);
+router.post("/blitz-kickoff/claim", authenticate, claimBlitzKickOffVoucher);
 router.get("/list", cacheGet({ keyPrefix: 'cache:user:list', ttlSeconds: 30 }), getUserList);
 router.get("/referred", authenticate, getReferredUsers);
 router.get("/referral-codes", authenticate, getReferralCodeUsers);

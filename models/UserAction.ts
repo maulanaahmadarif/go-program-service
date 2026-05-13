@@ -10,7 +10,8 @@ import {
   CreatedAt,
   UpdatedAt,
   ForeignKey,
-  BelongsTo
+  BelongsTo,
+  DataType,
 } from 'sequelize-typescript';
 import { Optional } from "sequelize";
 
@@ -18,14 +19,16 @@ import { DataTypes } from 'sequelize';
 import { User } from './User';                   // Adjust paths based on your project structure
 import { Form } from './Form';                   // Adjust paths based on your project structure
 import { Redemption } from './Redemption';
+import { CoinTransaction } from './CoinTransaction';
 
 export interface UserAttributes {
   action_id?: number;
   user_id: number;
   action_type: string;
-  entity_type: 'FORM' | 'REDEEM';
+  entity_type: 'FORM' | 'REDEEM' | 'COIN';
   form_id?: number;
   redemption_id?: number;
+  coin_transaction_id?: number | null;
   ip_address?: string;
   note?: string;
   user_agent?: string;
@@ -68,6 +71,11 @@ export class UserAction extends Model<UserAttributes, UserCreationAttributes> {
   public redemption_id?: number;
 
   @AllowNull(true)
+  @ForeignKey(() => CoinTransaction)
+  @Column(DataType.INTEGER)
+  public coin_transaction_id?: number | null;
+
+  @AllowNull(true)
   @Column(DataTypes.INET)
   public ip_address?: string;
 
@@ -95,4 +103,7 @@ export class UserAction extends Model<UserAttributes, UserCreationAttributes> {
 
   @BelongsTo(() => Redemption, "redemption_id")
   redemption!: Redemption;
+
+  @BelongsTo(() => CoinTransaction, "coin_transaction_id")
+  coin_transaction!: CoinTransaction;
 }

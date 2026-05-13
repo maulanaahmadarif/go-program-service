@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { CustomRequest } from '../types/api';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import fs from 'fs';
 import path from 'path';
 import { Op, QueryTypes } from 'sequelize';
@@ -15,6 +17,8 @@ import { sequelize } from '../db';
 import { logAction } from '../middleware/log';
 import { UserAction } from '../../models/UserAction';
 import { Project } from '../../models/Project';
+import { DailyCheckin } from '../../models/DailyCheckin';
+import { CoinTransaction } from '../../models/CoinTransaction';
 import { sendEmail } from '../services/brevo';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/points';
@@ -25,6 +29,12 @@ import { formBulkApproveQueue, formBulkRejectQueue } from '../queues/formQueues'
 import { approveFormById, ModerationError, rejectFormById } from '../services/formModeration';
 import { queueConfig } from '../config/queue';
 import { invalidateCacheByPrefix } from '../middleware/cache';
+import { REDEMPTION_TIMEZONE } from '../services/redemptionWindow';
+import { isDailyCheckinProgramOpen } from '../services/dailyCheckinWindow';
+import { getMilestoneBonusCoinsForDay, mergeMilestoneBonusClaimedDay, normalizeMilestoneBonusClaimedDays, milestoneBonusEarnedTodayWhere } from '../services/dailyCheckinRewards';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 /** Same TKDN / Aura JSONB @> predicate as getFormTypeUsers (label `products`, productCategory on line items). */
 const tkdnAuraProductCategoryFilter = sequelize.literal(
@@ -42,6 +52,7 @@ export const approveSubmission = async (req: CustomRequest, res: Response) => {
 
     const result = await approveFormById(form_id);
     await invalidateCacheByPrefix('cache:form:submission');
+    await invalidateCacheByPrefix('cache:project:list');
     res.status(200).json(result);
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error approving form');
@@ -68,6 +79,7 @@ export const deleteForm = async (req: CustomRequest, res: Response) => {
     }
     const result = await rejectFormById(form_id, reason);
     await invalidateCacheByPrefix('cache:form:submission');
+    await invalidateCacheByPrefix('cache:project:list');
     res.status(200).json(result);
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error deleting form');
@@ -325,10 +337,10 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
       firstSubmissionBonus = true;
     }
 
-    const currentDate = dayjs();
-    const targetDate = dayjs('2026-03-20');
-  
-    if (currentDate.isBefore(targetDate, 'day')) {
+    // Legacy rule: 4 submitted/approved forms completes project through EOD 2026-06-20 in REDEMPTION_TIMEZONE (default Asia/Jakarta)
+    const nowInTz = dayjs().tz(REDEMPTION_TIMEZONE);
+    const legacyFourFormRuleEndsExclusive = dayjs.tz('2026-06-21 00:00:00', REDEMPTION_TIMEZONE);
+    if (nowInTz.isBefore(legacyFourFormRuleEndsExclusive)) {
       if (formsCount === 4) {
         isProjectFormCompleted = true;
       }
@@ -379,14 +391,83 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
       form_id: submission.form_id,
     }, { transaction });
 
+    // Daily check-in milestone bonus: eligible when user has checked in today (same calendar day in REDEMPTION_TIMEZONE).
+    // At most one bonus per streak day (1–5) per local calendar day — tracked by `milestone_bonus_claimed_days` and
+    // by coin rows whose description includes `(Day N)` for that N.
+    let coinsEarned = 0;
+    if (user && isDailyCheckinProgramOpen()) {
+      const todayStr = dayjs().tz(REDEMPTION_TIMEZONE).format('YYYY-MM-DD');
+      const startOfToday = dayjs().tz(REDEMPTION_TIMEZONE).startOf('day').toDate();
+      const endOfToday = dayjs().tz(REDEMPTION_TIMEZONE).endOf('day').toDate();
+
+      const checkin = await DailyCheckin.findOne({ where: { user_id: userId }, transaction });
+      if (checkin) {
+        const lastStr = dayjs(checkin.last_checkin_date).tz(REDEMPTION_TIMEZONE).format('YYYY-MM-DD');
+
+        if (lastStr === todayStr) {
+          const streak = checkin.current_streak;
+          const claimedSlots = normalizeMilestoneBonusClaimedDays(checkin.milestone_bonus_claimed_days);
+          let alreadyGotBonusForThisStreakDay = claimedSlots.includes(streak);
+          if (!alreadyGotBonusForThisStreakDay && streak >= 1 && streak <= 5) {
+            const bonusWhere = milestoneBonusEarnedTodayWhere(
+              userId,
+              streak,
+              startOfToday,
+              endOfToday,
+              checkin.checkin_session_at ?? null
+            );
+            if (bonusWhere) {
+              alreadyGotBonusForThisStreakDay =
+                (await CoinTransaction.count({ where: bonusWhere, transaction })) > 0;
+            }
+          }
+
+          if (!alreadyGotBonusForThisStreakDay) {
+            coinsEarned = await getMilestoneBonusCoinsForDay(checkin.current_streak);
+
+            if (coinsEarned > 0) {
+              user.total_coins = (user.total_coins || 0) + coinsEarned;
+              user.lifetime_total_coins = (user.lifetime_total_coins || 0) + coinsEarned;
+              await user.save({ transaction });
+
+              const coinTx = await CoinTransaction.create({
+                user_id: userId,
+                form_id: submission.form_id,
+                coins: coinsEarned,
+                transaction_type: 'earn',
+                description: `Daily Check-In Form Submission Bonus (Day ${checkin.current_streak})`
+              }, { transaction });
+
+              checkin.milestone_bonus_claimed_days = mergeMilestoneBonusClaimedDay(
+                checkin.milestone_bonus_claimed_days,
+                checkin.current_streak
+              );
+              await checkin.save({ transaction });
+
+              await UserAction.create({
+                user_id: userId,
+                entity_type: 'COIN',
+                action_type: 'DAILY_CHECKIN_FORM_BONUS',
+                form_id: submission.form_id,
+                coin_transaction_id: coinTx.transaction_id,
+                note: `Earned ${coinsEarned} coins — daily check-in milestone (Day ${checkin.current_streak})`,
+              }, { transaction });
+            }
+          }
+        }
+      }
+    }
+
     await transaction.commit();
+    await invalidateCacheByPrefix('cache:project:list');
 
     res.status(200).json({ 
       message: `Form successfully submitted`, 
       status: res.status, 
       data: { 
         form_completed: isProjectFormCompleted,
-        first_submission_bonus: firstSubmissionBonus
+        first_submission_bonus: firstSubmissionBonus,
+        coins_earned: coinsEarned
       } 
     });
   } catch (error: any) {
@@ -427,7 +508,60 @@ export const getFormByProject = async (req: CustomRequest, res: Response) => {
       where: whereClause
     });
 
-    res.status(200).json({ message: 'List of forms', status: res.status, data: forms });
+    let rejected_milestones: Array<{
+      form_type_id: number;
+      form_id: number;
+      form_name: string | null;
+      note: string | null;
+      updated_at: Date;
+    }> = [];
+
+    if (projectId) {
+      const rejectedRows = await Form.findAll({
+        where: {
+          user_id: userId,
+          project_id: projectId,
+          status: 'rejected',
+        },
+        attributes: ['form_id', 'form_type_id', 'note', 'updatedAt'],
+        include: [
+          {
+            model: FormType,
+            attributes: ['form_name'],
+            required: true,
+          },
+        ],
+        order: [['updatedAt', 'DESC']],
+      });
+
+      const seenType = new Set<number>();
+      for (const row of rejectedRows) {
+        const ftid = Number(row.form_type_id);
+        if (seenType.has(ftid)) continue;
+        seenType.add(ftid);
+        rejected_milestones.push({
+          form_type_id: ftid,
+          form_id: row.form_id,
+          form_name: row.form_type?.form_name ?? null,
+          note: row.note ?? null,
+          updated_at: row.updatedAt,
+        });
+      }
+
+      // Resubmit creates a new row; the old row stays `rejected`. Hide the banner
+      // when this project already has a submitted or approved form for that milestone.
+      const satisfiedTypeIds = new Set(forms.map((f: Form) => Number(f.form_type_id)));
+      rejected_milestones = rejected_milestones.filter(
+        (r) => !satisfiedTypeIds.has(r.form_type_id)
+      );
+    }
+
+    res.status(200).json({
+      message: 'List of forms',
+      status: res.status,
+      data: forms,
+      rejected_milestones,
+    });
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error fetching forms');
 
@@ -705,9 +839,11 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       whereClause.form_type_id = Number.isNaN(parsedFormTypeId)
         ? form_type_id
         : parsedFormTypeId;
+      const formTypeCreatedFrom = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
+      const formTypeCreatedTo = dayjs.tz('2026-06-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
       whereClause.createdAt = {
-        [Op.gte]: new Date('2026-02-11T00:00:00.000Z'),
-        [Op.lte]: new Date('2026-03-20T23:59:59.999Z')
+        [Op.gte]: formTypeCreatedFrom,
+        [Op.lte]: formTypeCreatedTo,
       };
     }
 
@@ -1053,9 +1189,9 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
       });
     }
 
-    // Date filter: from May 1, 2025 to June 20, 2025 end of day
-    const startDate = new Date('2026-02-11T00:00:00.000Z');
-    const endDate = new Date('2026-03-20T23:59:59.999Z'); // June 20, 2025 end of day
+    // Date filter: 2026-05-13 start through 2026-06-20 EOD in REDEMPTION_TIMEZONE (default Asia/Jakarta)
+    const startDate = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const endDate = dayjs.tz('2026-06-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
 
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
@@ -1137,7 +1273,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
 
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
-    const championStartDate = new Date('2026-02-11T00:00:00.000Z');
+    const championStartDate = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
 
     // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 champion in parallel
     const [quotationForms, formType5Forms, formType5Champion] = await Promise.all([
@@ -1174,11 +1310,11 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
       INNER JOIN form_types ft ON f.form_type_id = ft.form_type_id
       WHERE f.status = 'approved' 
         AND f.form_type_id = 5
-        AND f.created_at >= '2026-02-11T00:00:00.000Z'
+        AND f.created_at >= :championStart
       GROUP BY u.user_id, u.username, u.fullname, u.email, u.total_points
       ORDER BY approved_submissions_count DESC, u.total_points DESC
       LIMIT 1
-    `, { type: QueryTypes.SELECT })
+    `, { type: QueryTypes.SELECT, replacements: { championStart: championStartDate } })
     ]);
 
     // Process quotation forms to count TKDN and Aura Edition submissions per user

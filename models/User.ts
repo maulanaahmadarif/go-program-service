@@ -25,6 +25,8 @@ import { Project } from './Project'
 import { VerificationToken } from './VerificationToken';
 import { FortuneWheelSpin } from './FortuneWheelSpin';
 import { UserMysteryBox } from './UserMysteryBox';
+import { DailyCheckin } from './DailyCheckin';
+import { CoinTransaction } from './CoinTransaction';
 
 
 export interface UserAttributes {
@@ -42,6 +44,8 @@ export interface UserAttributes {
   total_points?: number;
   accomplishment_total_points?: number;
   lifetime_total_points?: number;
+  total_coins?: number;
+  lifetime_total_coins?: number;
   is_active?: boolean;
   referral_code?: string;
   referred_by?: number;
@@ -111,6 +115,14 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
   @Column(DataType.INTEGER) // Specify data type
   public lifetime_total_points?: number;
 
+  @Default(0)
+  @Column(DataType.INTEGER)
+  public total_coins?: number;
+
+  @Default(0)
+  @Column(DataType.INTEGER)
+  public lifetime_total_coins?: number;
+
   @Default(false)
   @Column(DataType.BOOLEAN)
   public is_active?: boolean;
@@ -156,6 +168,12 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
 
   @HasMany(() => UserMysteryBox)
   user_mystery_boxes!: UserMysteryBox[];
+
+  @HasMany(() => DailyCheckin)
+  daily_checkins!: DailyCheckin[];
+
+  @HasMany(() => CoinTransaction)
+  coin_transactions!: CoinTransaction[];
 
   @BelongsTo(() => Company)
   company?: Company;
