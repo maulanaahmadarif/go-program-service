@@ -36,7 +36,7 @@ const BLITZ_KICK_OFF_TZ = "Asia/Jakarta";
 const BLITZ_KICK_OFF_PRODUCT_ID = 23;
 const BLITZ_KICK_OFF_NOTE = "Blitz Kick-Off";
 /** Inclusive of full local day 2026-05-15: [2026-05-15 00:00, 2026-05-16 00:00) in Jakarta */
-const BLITZ_KICK_OFF_START = dayjs.tz("2026-05-15 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_START = dayjs.tz("2026-05-14 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 const BLITZ_KICK_OFF_END = dayjs.tz("2026-05-16 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 /** Approved-form counts: from start of 2026-05-13 in Asia/Jakarta (not UTC midnight on the 13th). */
