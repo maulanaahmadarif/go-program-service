@@ -7,6 +7,6 @@ const router = express.Router();
 
 router.get('/rewards', authenticate, getDailyCheckinRewards);
 router.get('/status', authenticate, getCheckinStatus);
-router.post('/checkin', authenticate, checkDomain, performCheckin);
+router.post('/checkin', authenticate, performCheckin);
 
 export default router;

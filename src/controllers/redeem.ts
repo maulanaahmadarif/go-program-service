@@ -236,8 +236,14 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
   // Hardcoded values for referral redemption
   const product_id = 1;
   const notes = 'REFERRAL';
-  const shipping_address = 'voucher';
-  const postal_code = 'voucher';
+  const shipping_address =
+    typeof req.body?.shipping_address === 'string' && req.body.shipping_address.trim()
+      ? req.body.shipping_address.trim()
+      : 'voucher';
+  const postal_code =
+    typeof req.body?.postal_code === 'string' && req.body.postal_code.trim()
+      ? req.body.postal_code.trim()
+      : 'voucher';
 
   const transaction = await sequelize.transaction();
 
@@ -249,10 +255,22 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Get fullname, email, and phone_number from user data
-    const fullname = user.fullname || '';
-    const email = user.email || '';
-    const phone_number = user.phone_number || '';
+    const bodyFullname =
+      typeof req.body?.fullname === 'string' ? req.body.fullname.trim() : '';
+    const bodyEmail = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+    const bodyPhone =
+      typeof req.body?.phone_number === 'string' ? req.body.phone_number.trim() : '';
+
+    const fullname = bodyFullname || user.fullname || '';
+    const email = bodyEmail || user.email || '';
+    const phone_number = bodyPhone || user.phone_number || '';
+
+    if (!fullname || !email || !phone_number) {
+      await transaction.rollback();
+      return res.status(400).json({
+        message: 'Full name, email, and phone number are required for redemption',
+      });
+    }
 
     // Lock the referral product before checking stock to prevent overselling.
     const product = await findLockedProduct(product_id, transaction);
