@@ -28,6 +28,9 @@ function todayDateKey(): string {
 }
 
 function dateKeyInTz(input: Date | string): string {
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return input;
+  }
   return dayjs(input).tz(REDEMPTION_TIMEZONE).format('YYYY-MM-DD');
 }
 
@@ -157,7 +160,6 @@ export const performCheckin = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    let checkin = await DailyCheckin.findOne({ where: { user_id }, transaction });
     const user = await User.findByPk(user_id, { transaction, lock: transaction.LOCK.UPDATE });
 
     if (!user) {
@@ -165,6 +167,12 @@ export const performCheckin = async (req: Request, res: Response): Promise<void>
       res.status(404).json({ message: 'User not found' });
       return;
     }
+
+    let checkin = await DailyCheckin.findOne({
+      where: { user_id },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
 
     if (!isDailyCheckinProgramOpen()) {
       await transaction.rollback();
@@ -196,14 +204,13 @@ export const performCheckin = async (req: Request, res: Response): Promise<void>
     const resetMilestoneClaims = current_streak === 1 && (carryStreak === 0 || carryStreak === 5);
     const coinsToReward = await getCheckInCoinsForDay(current_streak);
 
-    const lastCheckinDate = dayjs.tz(todayStr, REDEMPTION_TIMEZONE).startOf('day').toDate();
     const sessionAt = new Date();
 
     if (!checkin) {
       checkin = await DailyCheckin.create(
         {
           user_id,
-          last_checkin_date: lastCheckinDate,
+          last_checkin_date: todayStr,
           current_streak,
           milestone_bonus_claimed_days: [],
           checkin_session_at: sessionAt,
@@ -211,7 +218,7 @@ export const performCheckin = async (req: Request, res: Response): Promise<void>
         { transaction }
       );
     } else {
-      checkin.last_checkin_date = lastCheckinDate;
+      checkin.last_checkin_date = todayStr;
       checkin.current_streak = current_streak;
       checkin.checkin_session_at = sessionAt;
       if (resetMilestoneClaims) {

@@ -20,7 +20,7 @@ import { User } from './User';
 export interface DailyCheckinAttributes {
   checkin_id?: number;
   user_id: number;
-  last_checkin_date: Date;
+  last_checkin_date: string;
   current_streak: number;
   /** Streak day indices (1–5) that earned the daily milestone form bonus in the current streak cycle; cleared when the streak resets. */
   milestone_bonus_claimed_days?: number[];
@@ -48,7 +48,7 @@ export class DailyCheckin extends Model<DailyCheckinAttributes, DailyCheckinCrea
 
   @AllowNull(false)
   @Column(DataType.DATEONLY)
-  public last_checkin_date!: Date;
+  public last_checkin_date!: string;
 
   @AllowNull(false)
   @Default(1)
