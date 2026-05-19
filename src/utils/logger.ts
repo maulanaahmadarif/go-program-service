@@ -3,8 +3,11 @@ import pino from 'pino';
 // Determine if we're in development mode
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
+const serviceName = process.env.OTEL_SERVICE_NAME || 'loyalty-program';
+
 // Create logger configuration
 const loggerConfig: pino.LoggerOptions = {
+  name: serviceName,
   level: process.env.LOG_LEVEL || (isDevelopment ? 'debug' : 'info'),
   formatters: {
     level: (label) => {

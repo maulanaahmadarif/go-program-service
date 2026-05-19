@@ -1,3 +1,4 @@
+import '../instrumentation';
 import logger from '../utils/logger';
 import './emailWorker';
 import './formBulkWorker';

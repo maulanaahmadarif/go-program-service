@@ -1,7 +1,7 @@
+import './instrumentation';
 import express from 'express';
 import { Request, Response, NextFunction } from 'express';
 import bodyParser, { json } from 'body-parser';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'path';
 import cookieParser from 'cookie-parser';
@@ -13,9 +13,6 @@ import { getMetrics, metricsMiddleware } from './controllers/metrics';
 import pinoHttp from 'pino-http';
 import logger from './utils/logger';
 import { bullBoardPath, bullBoardRouter } from './queues/bullBoard';
-
-// Load environment variables
-dotenv.config();
 
 // Initialize Express
 const app = express();
