@@ -36,6 +36,14 @@ import { getMilestoneBonusCoinsForDay, mergeMilestoneBonusClaimedDay, normalizeM
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+/** Admin UI formats timestamps in the browser local TZ (typically WIB); Node often runs in UTC — use Jakarta for Excel/API parity with campaign windows. */
+function formatSubmissionAt(
+  ts: Date | string | number | null | undefined
+): string {
+  if (ts == null) return '-';
+  return dayjs.utc(ts).tz(REDEMPTION_TIMEZONE).format('DD MMM YYYY HH:mm');
+}
+
 /** Same TKDN / Aura JSONB @> predicate as getFormTypeUsers (label `products`, productCategory on line items). */
 const tkdnAuraProductCategoryFilter = sequelize.literal(
   `(form_data @> '[{"label": "products", "value": [{"productCategory": "Aura Edition"}]}]' OR ` +
@@ -1060,7 +1068,7 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
         user_type: getUserType(item.user.user_type),
         project: item.project.name,
         milestone: item.form_type.form_name,
-        created_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
+        created_at: formatSubmissionAt(item.createdAt),
         status: item.status,
         note: item.note || '-',
         points_gained: points_gained,
@@ -1154,8 +1162,8 @@ export const getReport = async (req: CustomRequest, res: Response) => {
       project: item.project.name,
       status: item.status,
       total_point: item.form_type.point_reward + bonus_point,
-      submitted_at: dayjs(item.createdAt).format('DD MMM YYYY HH:mm'),
-      updated_at: dayjs(item.updatedAt).format('DD MMM YYYY HH:mm'),
+      submitted_at: formatSubmissionAt(item.createdAt),
+      updated_at: formatSubmissionAt(item.updatedAt),
     }
   })
 
