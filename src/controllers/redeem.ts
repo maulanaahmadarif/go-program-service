@@ -14,6 +14,7 @@ import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queu
 import { invalidateCacheByPrefix } from '../middleware/cache';
 import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
 import { getStockAllocationAvailability, ProductStockFlowType } from '../services/productStockAllocation';
+import { getRedemptionFlowLabel } from '../utils/redemptionFlow';
 
 const REDEEM_DUPLICATE_WINDOW_SECONDS = 5;
 
@@ -512,9 +513,21 @@ export const redeemList = async (req: CustomRequest, res: Response) => {
     const hasNextPage = pageNum < totalPages;
     const hasPrevPage = pageNum > 1;
 
+    const data = redemptions.map((r) => {
+      const plain = r.get({ plain: true }) as any;
+      return {
+        ...plain,
+        flow: getRedemptionFlowLabel({
+          notes: plain.notes,
+          points_spent: plain.points_spent,
+          coins_spent: plain.coins_spent,
+        }),
+      };
+    });
+
     res.status(200).json({
       message: 'Redemption list retrieved successfully',
-      data: redemptions,
+      data,
       pagination: {
         current_page: pageNum,
         total_pages: totalPages,
@@ -679,7 +692,11 @@ export const getUserRedemptionList = async (req: CustomRequest, res: Response) =
         postal_code: plainRedemption.postal_code,
         notes: plainRedemption.notes,
         status: plainRedemption.status,
-        note: plainRedemption.note,
+        flow: getRedemptionFlowLabel({
+          notes: plainRedemption.notes,
+          points_spent: plainRedemption.points_spent,
+          coins_spent: plainRedemption.coins_spent,
+        }),
         created_at: dayjs(plainRedemption.createdAt).format('DD MMM YYYY HH:mm'),
         updated_at: dayjs(plainRedemption.updatedAt).format('DD MMM YYYY HH:mm')
       };
@@ -1065,7 +1082,9 @@ export const downloadRedeem = async (req: CustomRequest, res: Response) => {
       { header: 'Email', key: 'email', width: 30 },
       { header: 'Full Name', key: 'fullname', width: 25 },
       { header: 'Product Name', key: 'product_name', width: 30 },
+      { header: 'Flow', key: 'flow', width: 18 },
       { header: 'Points Spent', key: 'points_spent', width: 15 },
+      { header: 'Coins Spent', key: 'coins_spent', width: 12 },
       { header: 'Status', key: 'status', width: 12 },
       { header: 'Phone Number', key: 'phone_number', width: 18 },
       { header: 'Postal Code', key: 'postal_code', width: 15 },
@@ -1094,7 +1113,13 @@ export const downloadRedeem = async (req: CustomRequest, res: Response) => {
         email: plainRedemption.email,
         fullname: plainRedemption.fullname,
         product_name: plainRedemption.product?.name || 'N/A',
+        flow: getRedemptionFlowLabel({
+          notes: plainRedemption.notes,
+          points_spent: plainRedemption.points_spent,
+          coins_spent: plainRedemption.coins_spent,
+        }),
         points_spent: plainRedemption.points_spent,
+        coins_spent: plainRedemption.coins_spent ?? 0,
         status: plainRedemption.status,
         phone_number: plainRedemption.phone_number,
         postal_code: plainRedemption.postal_code,
