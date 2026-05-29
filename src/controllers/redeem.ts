@@ -16,8 +16,6 @@ import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/red
 import { getStockAllocationAvailability, ProductStockFlowType } from '../services/productStockAllocation';
 import { getRedemptionFlowLabel } from '../utils/redemptionFlow';
 
-const REDEEM_DUPLICATE_WINDOW_SECONDS = 5;
-
 const findLockedUser = (userId: number, transaction: Transaction) =>
   User.findByPk(userId, {
     transaction,
@@ -29,31 +27,6 @@ const findLockedProduct = (productId: number, transaction: Transaction) =>
     transaction,
     lock: transaction.LOCK.UPDATE,
   });
-
-const hasRecentActiveRedemption = async (
-  userId: number,
-  productId: number,
-  transaction: Transaction
-) => {
-  const recentThreshold = dayjs()
-    .subtract(REDEEM_DUPLICATE_WINDOW_SECONDS, 'second')
-    .toDate();
-
-  const recentRedemption = await Redemption.findOne({
-    where: {
-      user_id: userId,
-      product_id: productId,
-      status: 'active',
-      createdAt: {
-        [Op.gte]: recentThreshold,
-      },
-    },
-    transaction,
-    order: [['createdAt', 'DESC']],
-  });
-
-  return recentRedemption;
-};
 
 const getRedemptionFlowType = (notes?: string | null): ProductStockFlowType => {
   return notes === 'Wheel Spin Voucher' ? 'spin_wheel' : 'redeem';
@@ -118,14 +91,6 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
     }
 
     const requiredPoints = product.points_required || 0;
-
-    const recentRedemption = await hasRecentActiveRedemption(user_id, product_id, transaction);
-    if (recentRedemption) {
-      await transaction.rollback();
-      return res.status(429).json({
-        message: 'Duplicate redemption detected. Please wait before redeeming the same product again.',
-      });
-    }
 
     if ((user.total_points || 0) < requiredPoints) {
       await transaction.rollback();
@@ -278,14 +243,6 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
     if (!product) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Referral product not found' });
-    }
-
-    const recentRedemption = await hasRecentActiveRedemption(user_id, product_id, transaction);
-    if (recentRedemption) {
-      await transaction.rollback();
-      return res.status(429).json({
-        message: 'Duplicate redemption detected. Please wait before redeeming the same product again.',
-      });
     }
 
     const redeemStock = await getStockAllocationAvailability(product_id, 'redeem', transaction);
