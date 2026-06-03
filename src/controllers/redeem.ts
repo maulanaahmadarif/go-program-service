@@ -14,7 +14,11 @@ import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queu
 import { invalidateCacheByPrefix } from '../middleware/cache';
 import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
 import { getStockAllocationAvailability, ProductStockFlowType } from '../services/productStockAllocation';
-import { getRedemptionFlowLabel } from '../utils/redemptionFlow';
+import {
+  getRedemptionFlowLabel,
+  isValidRedemptionFlowFilter,
+  redemptionFlowWhereClause,
+} from '../utils/redemptionFlow';
 
 const findLockedUser = (userId: number, transaction: Transaction) =>
   User.findByPk(userId, {
@@ -31,6 +35,131 @@ const findLockedProduct = (productId: number, transaction: Transaction) =>
 const getRedemptionFlowType = (notes?: string | null): ProductStockFlowType => {
   return notes === 'Wheel Spin Voucher' ? 'spin_wheel' : 'redeem';
 };
+
+type RedeemListFilterParams = {
+  status?: string;
+  product_id?: string;
+  notes?: string;
+  flow?: string;
+  start_date?: string;
+  end_date?: string;
+};
+
+type RedeemListWhereBuildResult =
+  | { ok: true; where: Record<string, unknown> }
+  | { ok: false; status: number; message: string };
+
+function buildRedeemListWhereClause(params: RedeemListFilterParams): RedeemListWhereBuildResult {
+  const { status, product_id, notes, flow, start_date, end_date } = params;
+
+  if (status && !['active', 'approved', 'rejected'].includes(status)) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Status must be either 'active', 'approved', or 'rejected'",
+    };
+  }
+
+  if (flow && !isValidRedemptionFlowFilter(flow)) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "flow must be one of: spin_wheel, referral, coin, points",
+    };
+  }
+
+  let productId: number | undefined;
+  if (product_id) {
+    productId = parseInt(product_id, 10);
+    if (isNaN(productId) || productId < 1) {
+      return {
+        ok: false,
+        status: 400,
+        message: 'Product ID must be a positive integer',
+      };
+    }
+  }
+
+  let startDate: Date | undefined;
+  let endDate: Date | undefined;
+
+  if (start_date) {
+    startDate = new Date(start_date);
+    if (isNaN(startDate.getTime())) {
+      return {
+        ok: false,
+        status: 400,
+        message:
+          'Invalid start_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)',
+      };
+    }
+  }
+
+  if (end_date) {
+    endDate = new Date(end_date);
+    if (isNaN(endDate.getTime())) {
+      return {
+        ok: false,
+        status: 400,
+        message:
+          'Invalid end_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)',
+      };
+    }
+  }
+
+  if (startDate && endDate && startDate > endDate) {
+    return {
+      ok: false,
+      status: 400,
+      message: 'start_date must be before or equal to end_date',
+    };
+  }
+
+  const baseWhere: Record<string, unknown> = {};
+
+  if (status) {
+    baseWhere.status = status;
+  }
+
+  if (productId) {
+    baseWhere.product_id = productId;
+  }
+
+  if (notes) {
+    baseWhere.notes = { [Op.like]: notes };
+  }
+
+  if (startDate || endDate) {
+    const createdAt: Record<string | symbol, Date> = {};
+    if (startDate) {
+      createdAt[Op.gte] = startDate;
+    }
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      if (
+        endDate.getHours() === 0 &&
+        endDate.getMinutes() === 0 &&
+        endDate.getSeconds() === 0
+      ) {
+        endOfDay.setHours(23, 59, 59, 999);
+      }
+      createdAt[Op.lte] = endOfDay;
+    }
+    baseWhere.createdAt = createdAt;
+  }
+
+  if (flow && isValidRedemptionFlowFilter(flow)) {
+    const flowWhere = redemptionFlowWhereClause(flow);
+    const hasBase = Object.keys(baseWhere).length > 0;
+    return {
+      ok: true,
+      where: hasBase ? { [Op.and]: [baseWhere, flowWhere] } : (flowWhere as Record<string, unknown>),
+    };
+  }
+
+  return { ok: true, where: baseWhere };
+}
 
 export const getRedemptionWindowStatus = async (req: CustomRequest, res: Response) => {
   try {
@@ -327,7 +456,7 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
 
 export const redeemList = async (req: CustomRequest, res: Response) => {
   try {
-    const { page = 1, limit = 10, status, start_date, end_date, product_id, notes } = req.query;
+    const { page = 1, limit = 10, status, start_date, end_date, product_id, notes, flow } = req.query;
 
     // Validate page and limit
     const pageNum = parseInt(page as string, 10);
@@ -347,92 +476,23 @@ export const redeemList = async (req: CustomRequest, res: Response) => {
       });
     }
 
-    // Validate status if provided
-    if (status && !['active', 'approved', 'rejected'].includes(status as string)) {
-      return res.status(400).json({
-        message: "Status must be either 'active', 'approved', or 'rejected'",
-        status: 400
+    const whereBuilt = buildRedeemListWhereClause({
+      status: status as string | undefined,
+      product_id: product_id as string | undefined,
+      notes: notes as string | undefined,
+      flow: flow as string | undefined,
+      start_date: start_date as string | undefined,
+      end_date: end_date as string | undefined,
+    });
+
+    if (!whereBuilt.ok) {
+      return res.status(whereBuilt.status).json({
+        message: whereBuilt.message,
+        status: whereBuilt.status,
       });
     }
 
-    // Validate product_id if provided
-    let productId: number | undefined;
-    if (product_id) {
-      productId = parseInt(product_id as string, 10);
-      if (isNaN(productId) || productId < 1) {
-        return res.status(400).json({
-          message: "Product ID must be a positive integer",
-          status: 400
-        });
-      }
-    }
-
-    // Validate date parameters if provided
-    let startDate: Date | undefined;
-    let endDate: Date | undefined;
-
-    if (start_date) {
-      startDate = new Date(start_date as string);
-      if (isNaN(startDate.getTime())) {
-        return res.status(400).json({
-          message: "Invalid start_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
-          status: 400
-        });
-      }
-    }
-
-    if (end_date) {
-      endDate = new Date(end_date as string);
-      if (isNaN(endDate.getTime())) {
-        return res.status(400).json({
-          message: "Invalid end_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
-          status: 400
-        });
-      }
-    }
-
-    // Validate that start_date is before end_date if both are provided
-    if (startDate && endDate && startDate > endDate) {
-      return res.status(400).json({
-        message: "start_date must be before or equal to end_date",
-        status: 400
-      });
-    }
-
-    // Build where clause
-    const whereClause: any = {};
-
-    if (status) {
-      whereClause.status = status;
-    }
-
-    if (productId) {
-      whereClause.product_id = productId;
-    }
-
-    if (notes) {
-      whereClause.notes = {
-        [Op.like]: notes
-      };
-    }
-
-    // Add date range filtering
-    if (startDate || endDate) {
-      whereClause.createdAt = {};
-      
-      if (startDate) {
-        whereClause.createdAt[Op.gte] = startDate;
-      }
-      
-      if (endDate) {
-        // Set end date to end of day if only date is provided (no time)
-        const endOfDay = new Date(endDate);
-        if (endDate.getHours() === 0 && endDate.getMinutes() === 0 && endDate.getSeconds() === 0) {
-          endOfDay.setHours(23, 59, 59, 999);
-        }
-        whereClause.createdAt[Op.lte] = endOfDay;
-      }
-    }
+    const whereClause = whereBuilt.where;
 
     // Calculate offset
     const offset = (pageNum - 1) * limitNum;
@@ -928,88 +988,24 @@ export const checkUserRedeemStatus = async (req: CustomRequest, res: Response) =
 
 export const downloadRedeem = async (req: CustomRequest, res: Response) => {
   try {
-    const { status, start_date, end_date, product_id } = req.query;
+    const { status, start_date, end_date, product_id, flow } = req.query;
 
-    // Validate status if provided
-    if (status && !['active', 'approved', 'rejected'].includes(status as string)) {
-      return res.status(400).json({
-        message: "Status must be either 'active', 'approved', or 'rejected'",
-        status: 400
+    const whereBuilt = buildRedeemListWhereClause({
+      status: status as string | undefined,
+      product_id: product_id as string | undefined,
+      flow: flow as string | undefined,
+      start_date: start_date as string | undefined,
+      end_date: end_date as string | undefined,
+    });
+
+    if (!whereBuilt.ok) {
+      return res.status(whereBuilt.status).json({
+        message: whereBuilt.message,
+        status: whereBuilt.status,
       });
     }
 
-    // Validate product_id if provided
-    let productId: number | undefined;
-    if (product_id) {
-      productId = parseInt(product_id as string, 10);
-      if (isNaN(productId) || productId < 1) {
-        return res.status(400).json({
-          message: "Product ID must be a positive integer",
-          status: 400
-        });
-      }
-    }
-
-    // Validate date parameters if provided
-    let startDate: Date | undefined;
-    let endDate: Date | undefined;
-
-    if (start_date) {
-      startDate = new Date(start_date as string);
-      if (isNaN(startDate.getTime())) {
-        return res.status(400).json({
-          message: "Invalid start_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
-          status: 400
-        });
-      }
-    }
-
-    if (end_date) {
-      endDate = new Date(end_date as string);
-      if (isNaN(endDate.getTime())) {
-        return res.status(400).json({
-          message: "Invalid end_date format. Use ISO date format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)",
-          status: 400
-        });
-      }
-    }
-
-    // Validate that start_date is before end_date if both are provided
-    if (startDate && endDate && startDate > endDate) {
-      return res.status(400).json({
-        message: "start_date must be before or equal to end_date",
-        status: 400
-      });
-    }
-
-    // Build where clause (same logic as redeemList)
-    const whereClause: any = {};
-
-    if (status) {
-      whereClause.status = status;
-    }
-
-    if (productId) {
-      whereClause.product_id = productId;
-    }
-
-    // Add date range filtering
-    if (startDate || endDate) {
-      whereClause.createdAt = {};
-      
-      if (startDate) {
-        whereClause.createdAt[Op.gte] = startDate;
-      }
-      
-      if (endDate) {
-        // Set end date to end of day if only date is provided (no time)
-        const endOfDay = new Date(endDate);
-        if (endDate.getHours() === 0 && endDate.getMinutes() === 0 && endDate.getSeconds() === 0) {
-          endOfDay.setHours(23, 59, 59, 999);
-        }
-        whereClause.createdAt[Op.lte] = endOfDay;
-      }
-    }
+    const whereClause = whereBuilt.where;
 
     // Get all redemptions (no pagination for export)
     const redemptions = await Redemption.findAll({
