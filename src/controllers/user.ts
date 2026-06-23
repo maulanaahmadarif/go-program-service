@@ -561,11 +561,7 @@ export const getUserList = async (req: CustomRequest, res: Response) => {
 				...plainUser,
 				referrer_username: plainUser.referrer?.username || null,
 				company_name: plainUser.company?.name || null,
-				// For T2 users, show the referral code they used during signup
-				referral_code:
-					plainUser.user_type === "T2"
-						? plainUser.referrer?.referral_code || null
-						: plainUser.referral_code,
+				referral_code: plainUser.referral_code || null,
 				referrer: undefined,
 				company: undefined,
 				created_at: dayjs(plainUser.createdAt).format("DD MMM YYYY HH:mm"),
@@ -1275,10 +1271,7 @@ export const downloadUserList = async (req: CustomRequest, res: Response) => {
 				...plainUser,
 				referrer_username: plainUser.referrer?.username || null,
 				company_name: plainUser.company?.name || null,
-				referral_code:
-					plainUser.user_type === "T2"
-						? plainUser.referrer?.referral_code || null
-						: plainUser.referral_code,
+				referral_code: plainUser.referral_code || null,
 				created_at: dayjs(plainUser.createdAt).format("DD MMM YYYY HH:mm"),
 			};
 		});
