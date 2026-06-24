@@ -7,17 +7,17 @@ dayjs.extend(timezone);
 
 export const REDEMPTION_TIMEZONE = process.env.REDEMPTION_TIMEZONE || 'Asia/Jakarta';
 
-/** Inclusive window: 2026-05-26 00:00 through end of 2026-05-31 (WIB), overridable via env */
+/** Inclusive window: 2026-06-25 00:00 through end of 2026-06-30 (WIB), overridable via env */
 function getWindowBounds() {
   const tz = REDEMPTION_TIMEZONE;
 
   const start = process.env.REDEMPTION_WINDOW_START
     ? dayjs.tz(process.env.REDEMPTION_WINDOW_START, tz)
-    : dayjs.tz('2026-05-26 00:00:00', tz);
+    : dayjs.tz('2026-06-25 00:00:00', tz);
 
   const end = process.env.REDEMPTION_WINDOW_END
     ? dayjs.tz(process.env.REDEMPTION_WINDOW_END, tz)
-    : dayjs.tz('2026-05-31', tz).endOf('day');
+    : dayjs.tz('2026-06-30', tz).endOf('day');
 
   return { start, end, tz };
 }
