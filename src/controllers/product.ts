@@ -11,6 +11,9 @@ export const getProductList = async (req: CustomRequest, res: Response) => {
 
     const coinRedemption =
       req.query.coin_redemption === 'true' || req.query.coin_redemption === '1';
+    /** Referral e-voucher claim on profile (product #1): use `referral` allocation pool */
+    const referralRedemption =
+      req.query.referral_redemption === 'true' || req.query.referral_redemption === '1';
     /** Points redeem page: omit coin-only SKUs (currency_type === 'coin'). Use with redeem.tsx */
     const pointsRedemption =
       req.query.points_redemption === 'true' || req.query.points_redemption === '1';
@@ -52,7 +55,11 @@ export const getProductList = async (req: CustomRequest, res: Response) => {
       order,
     });
 
-    const flowForStock = coinRedemption ? 'coin' : 'redeem';
+    const flowForStock = coinRedemption
+      ? 'coin'
+      : referralRedemption
+        ? 'referral'
+        : 'redeem';
 
     const productsWithFlowStock = await Promise.all(products.map(async (product) => {
       const plainProduct = product.get({ plain: true });

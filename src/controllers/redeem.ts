@@ -18,6 +18,8 @@ import {
   getRedemptionFlowLabel,
   isValidRedemptionFlowFilter,
   redemptionFlowWhereClause,
+  REDEMPTION_NOTE_REFERRAL,
+  REDEMPTION_NOTE_SPIN_WHEEL,
 } from '../utils/redemptionFlow';
 
 const findLockedUser = (userId: number, transaction: Transaction) =>
@@ -33,7 +35,9 @@ const findLockedProduct = (productId: number, transaction: Transaction) =>
   });
 
 const getRedemptionFlowType = (notes?: string | null): ProductStockFlowType => {
-  return notes === 'Wheel Spin Voucher' ? 'spin_wheel' : 'redeem';
+  if (notes === REDEMPTION_NOTE_SPIN_WHEEL) return 'spin_wheel';
+  if (notes === REDEMPTION_NOTE_REFERRAL) return 'referral';
+  return 'redeem';
 };
 
 type RedeemListFilterParams = {
@@ -374,18 +378,18 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
       return res.status(404).json({ message: 'Referral product not found' });
     }
 
-    const redeemStock = await getStockAllocationAvailability(product_id, 'redeem', transaction);
-    if (redeemStock.allocation && redeemStock.availableStock <= 0) {
+    const referralStock = await getStockAllocationAvailability(product_id, 'referral', transaction);
+    if (referralStock.allocation && referralStock.availableStock <= 0) {
       await transaction.rollback();
       return res.status(400).json({ message: 'Referral product is out of stock for redemption' });
     }
 
-    if (!redeemStock.allocation && redeemStock.hasAnyAllocation) {
+    if (!referralStock.allocation && referralStock.hasAnyAllocation) {
       await transaction.rollback();
       return res.status(400).json({ message: 'Referral product is not allocated for redemption' });
     }
 
-    if (!redeemStock.allocation && (product.stock_quantity || 0) <= 0) {
+    if (!referralStock.allocation && (product.stock_quantity || 0) <= 0) {
       await transaction.rollback();
       return res.status(400).json({ message: 'Referral product is out of stock' });
     }
@@ -404,9 +408,9 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
       status: 'active'
     }, { transaction });
 
-    if (redeemStock.allocation) {
-      redeemStock.allocation.used_stock = (redeemStock.allocation.used_stock || 0) + 1;
-      await redeemStock.allocation.save({ transaction });
+    if (referralStock.allocation) {
+      referralStock.allocation.used_stock = (referralStock.allocation.used_stock || 0) + 1;
+      await referralStock.allocation.save({ transaction });
     } else {
       product.stock_quantity = (product.stock_quantity || 0) - 1;
       await product.save({ transaction });
