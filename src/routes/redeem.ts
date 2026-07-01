@@ -8,8 +8,8 @@ import { cacheGet } from '../middleware/cache';
 const router = express.Router();
 
 router.get('/redeem-status', getRedemptionWindowStatus);
-router.post('/redeem', authenticate, redeemPoint);
-router.post('/redeem-referral', authenticate, redeemReferralPoint);
+router.post('/redeem', authenticate, checkDomain, redeemPoint);
+router.post('/redeem-referral', authenticate, checkDomain, redeemReferralPoint);
 router.get('/list', authenticate, cacheGet({ keyPrefix: 'cache:redeem:list', ttlSeconds: 30, includeUser: true }), redeemList);
 router.get('/user-list', authenticate, getUserRedemptionList);
 router.get('/download', authenticate, downloadRedeem);

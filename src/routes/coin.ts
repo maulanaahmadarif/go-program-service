@@ -5,7 +5,7 @@ import checkDomain from '../middleware/domain';
 
 const router = express.Router();
 
-router.post('/redeem', authenticate, redeemCoin);
+router.post('/redeem', authenticate, checkDomain, redeemCoin);
 router.get('/transactions', authenticate, getCoinTransactions);
 
 export default router;

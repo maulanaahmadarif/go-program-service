@@ -11,8 +11,8 @@ import checkDomain from "../middleware/domain";
 
 const router = express.Router();
 
-router.post("/create", authenticate, createProject);
-router.post("/update", authenticate, editProject);
+router.post("/create", authenticate, checkDomain, createProject);
+router.post("/update", authenticate, checkDomain, editProject);
 router.get("/list", authenticate, cacheGet({ keyPrefix: 'cache:project:list', ttlSeconds: 300, includeUser: true }), getProjectList);
 
 export default router;
