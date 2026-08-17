@@ -27,6 +27,8 @@ import { FortuneWheelSpin } from './FortuneWheelSpin';
 import { UserMysteryBox } from './UserMysteryBox';
 import { DailyCheckin } from './DailyCheckin';
 import { CoinTransaction } from './CoinTransaction';
+import { UserPhasePoint } from './UserPhasePoint';
+import { ThreeDayQuest } from './ThreeDayQuest';
 
 
 export interface UserAttributes {
@@ -174,6 +176,12 @@ export class User extends Model<UserAttributes, UserCreationAttributes> {
 
   @HasMany(() => CoinTransaction)
   coin_transactions!: CoinTransaction[];
+
+  @HasMany(() => UserPhasePoint)
+  user_phase_points!: UserPhasePoint[];
+
+  @HasMany(() => ThreeDayQuest)
+  three_day_quests!: ThreeDayQuest[];
 
   @BelongsTo(() => Company)
   company?: Company;

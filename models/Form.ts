@@ -30,13 +30,14 @@ export interface FormAttributes {
   project_id: number;
   status?: string;
   form_data: object,
+  product_quantity?: number;
   note?: string,
   createdAt?: Date;
   updatedAt?: Date;  
 }
 
 interface FormCreationAttributes
-  extends Optional<FormAttributes, "form_id"> {}
+  extends Optional<FormAttributes, "form_id" | "product_quantity"> {}
 
 // Define the Form model
 @Table({ tableName: 'forms', underscored: true })
@@ -70,6 +71,11 @@ export class Form extends Model<FormAttributes, FormCreationAttributes> {
   @AllowNull(true)
   @Column(DataType.JSONB)
   public form_data?: object;
+
+  @AllowNull(false)
+  @Default(0)
+  @Column(DataType.INTEGER)
+  public product_quantity!: number;
 
   @AllowNull(true)
   @Column(DataType.STRING)

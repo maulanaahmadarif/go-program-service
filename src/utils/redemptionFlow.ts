@@ -9,12 +9,16 @@ export const REDEMPTION_NOTE_REFERRAL = 'REFERRAL';
 /** Matches `BLITZ_KICK_OFF_NOTE` in user controller */
 export const REDEMPTION_NOTE_BLITZ = 'Blitz Kick-Off';
 
+/** Matches 3 Day Quest voucher claim */
+export const REDEMPTION_NOTE_THREE_DAY_QUEST = '3 Day Quest';
+
 /** Query param values for admin redeem list / download (`?flow=`) */
 export const REDEMPTION_FLOW_FILTER_VALUES = [
   'spin_wheel',
   'referral',
   'coin',
   'points',
+  'three_day_quest',
 ] as const;
 
 export type RedemptionFlowFilter = (typeof REDEMPTION_FLOW_FILTER_VALUES)[number];
@@ -29,6 +33,7 @@ export function redemptionFlowWhereClause(flow: RedemptionFlowFilter): WhereOpti
     REDEMPTION_NOTE_SPIN_WHEEL,
     REDEMPTION_NOTE_REFERRAL,
     REDEMPTION_NOTE_BLITZ,
+    REDEMPTION_NOTE_THREE_DAY_QUEST,
   ];
 
   switch (flow) {
@@ -36,6 +41,8 @@ export function redemptionFlowWhereClause(flow: RedemptionFlowFilter): WhereOpti
       return { notes: REDEMPTION_NOTE_SPIN_WHEEL };
     case 'referral':
       return { notes: REDEMPTION_NOTE_REFERRAL };
+    case 'three_day_quest':
+      return { notes: REDEMPTION_NOTE_THREE_DAY_QUEST };
     case 'coin':
       return { coins_spent: { [Op.gt]: 0 } };
     case 'points':
@@ -74,6 +81,7 @@ export function getRedemptionFlowLabel(args: {
   if (notes === REDEMPTION_NOTE_SPIN_WHEEL) return 'Spin wheel';
   if (notes === REDEMPTION_NOTE_REFERRAL) return 'Referral';
   if (notes === REDEMPTION_NOTE_BLITZ) return 'Blitz Kick-Off';
+  if (notes === REDEMPTION_NOTE_THREE_DAY_QUEST) return '3 Day Quest';
   if (coins > 0) return 'Coin redemption';
   if (points > 0) return 'Points redemption';
 

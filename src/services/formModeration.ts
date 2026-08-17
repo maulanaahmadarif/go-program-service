@@ -6,6 +6,8 @@ import { Op } from 'sequelize';
 import { sequelize } from '../db';
 import logger from '../utils/logger';
 import { calculateBonusPoints } from '../utils/points';
+import { resolveProductQuantity } from '../utils/formProductQuantity';
+import { awardPoints } from './userPhasePoints';
 import { enqueueApprovalEmail, enqueueRejectionEmail } from '../queues/emailQueue';
 import { Form } from '../../models/Form';
 import { FormType } from '../../models/FormType';
@@ -39,18 +41,10 @@ export interface ApproveFormResult {
 }
 
 /** Form type 4 milestone window in REDEMPTION_TIMEZONE (default Asia/Jakarta): 2026-05-13 start through 2026-06-20 EOD */
-const type4StartDate = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
+const type4StartDate = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
 /** Shared campaign end: inclusive through end of 2026-06-20 in Jakarta (completion bonus + type 4 window). */
-const CAMPAIGN_END_JAKARTA = dayjs.tz('2026-06-20', REDEMPTION_TIMEZONE).endOf('day');
+const CAMPAIGN_END_JAKARTA = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day');
 const type4EndDate = CAMPAIGN_END_JAKARTA.toDate();
-
-const getDerivedProductQuantity = (formData: unknown): number => {
-  if (!Array.isArray(formData)) return 0;
-  const productsEntry = formData.find((entry: any) => entry?.label === 'products');
-  if (!productsEntry || !Array.isArray(productsEntry.value) || productsEntry.value.length === 0) return 0;
-  const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
-  return Number.isFinite(quantity) ? quantity : 0;
-};
 
 const parseFormDataFlags = (formData: unknown) => {
   let isAuraEdition = false;
@@ -129,7 +123,10 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
     }
 
     const { isAuraEdition, customerTypeBonus } = parseFormDataFlags(updatedForm.form_data);
-    const effectiveProductQuantity = getDerivedProductQuantity(updatedForm.form_data);
+    const effectiveProductQuantity = resolveProductQuantity(
+      updatedForm.product_quantity,
+      updatedForm.form_data
+    );
     const additionalPoint = calculateBonusPoints(updatedForm.form_type_id, effectiveProductQuantity, isAuraEdition);
     const completionBonus = eligibleForCompletionBonus && approvedSubmissionsCount === 4 ? 200 : 0;
 
@@ -158,17 +155,7 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
       ),
     ]);
 
-    await User.update(
-      {
-        total_points: sequelize.literal(`total_points + ${totalPoints}`),
-        accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${totalPoints}`),
-        lifetime_total_points: sequelize.literal(`lifetime_total_points + ${totalPoints}`),
-      },
-      {
-        where: { user_id: user.user_id },
-        transaction,
-      }
-    );
+    await awardPoints(user.user_id, totalPoints, { transaction });
 
     let formType4MilestoneBonus = 0;
     if (
@@ -206,14 +193,7 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
           { transaction }
         );
 
-        await User.update(
-          {
-            total_points: sequelize.literal(`total_points + ${formType4MilestoneBonus}`),
-            accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${formType4MilestoneBonus}`),
-            lifetime_total_points: sequelize.literal(`lifetime_total_points + ${formType4MilestoneBonus}`),
-          },
-          { where: { user_id: user.user_id }, transaction }
-        );
+        await awardPoints(user.user_id, formType4MilestoneBonus, { transaction });
       }
     }
 

@@ -23,9 +23,56 @@ import { CustomRequest } from "../types/api";
 import { enqueuePasswordResetEmail, enqueueSignupConfirmationEmail, enqueueWelcomeEmail } from "../queues/emailQueue";
 import { Product } from "../../models/Product";
 import { getProductFlowAvailableStock, getStockAllocationAvailability } from "../services/productStockAllocation";
+import { awardPoints } from "../services/userPhasePoints";
+import { UserPhasePoint } from "../../models/UserPhasePoint";
+import { Campaign } from "../../models/Campaign";
+import { getReferralBonusPointsFromSubmissionCount } from "../utils/points";
 
 /** One-time points granted when a customer completes self-service registration (`userSignup`). */
 const SIGNUP_WELCOME_POINTS = 400;
+
+function campaignWindowReplacements(campaign: Campaign) {
+	return {
+		campaignStartsAt: campaign.starts_at,
+		campaignEndsAt: campaign.ends_at ?? null,
+	};
+}
+
+/** First form was submitted inside the current campaign (when the 2,000 referrer bonus is awarded). */
+const FIRST_FORM_IN_CAMPAIGN_SQL = `(
+	EXISTS (
+		SELECT 1 FROM forms
+		WHERE forms.user_id = "User".user_id
+			AND forms.created_at >= :campaignStartsAt
+			AND (:campaignEndsAt IS NULL OR forms.created_at < :campaignEndsAt)
+	)
+	AND NOT EXISTS (
+		SELECT 1 FROM forms
+		WHERE forms.user_id = "User".user_id
+			AND forms.created_at < :campaignStartsAt
+	)
+)`;
+
+/** Signed up in this campaign, or first milestone landed in this campaign. */
+const REFERRAL_IN_CAMPAIGN_SQL = `(
+	(
+		"User".created_at >= :campaignStartsAt
+		AND (:campaignEndsAt IS NULL OR "User".created_at < :campaignEndsAt)
+	)
+	OR ${FIRST_FORM_IN_CAMPAIGN_SQL}
+)`;
+
+const phasePointsInclude = {
+	model: UserPhasePoint,
+	attributes: ["campaign_id", "earned_points"],
+	separate: true,
+	include: [{ model: Campaign, attributes: ["phase"] }],
+};
+
+function earnedPointsForPhase(rows: any[] | undefined, phase: number): number {
+	const match = (rows || []).find((row) => Number(row.campaign?.phase) === phase);
+	return Number(match?.earned_points) || 0;
+}
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -36,11 +83,11 @@ const BLITZ_KICK_OFF_TZ = "Asia/Jakarta";
 const BLITZ_KICK_OFF_PRODUCT_ID = 23;
 const BLITZ_KICK_OFF_NOTE = "Blitz Kick-Off";
 /** Inclusive Blitz Kick-Off day in Jakarta/WIB through local 23:59:59 — [2026-05-27 00:00, 2026-05-28 00:00). */
-const BLITZ_KICK_OFF_START = dayjs.tz("2026-05-27 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
-const BLITZ_KICK_OFF_END = dayjs.tz("2026-05-28 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_START = dayjs.tz("2026-08-17 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_END = dayjs.tz("2026-08-18 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 /** Approved-form counts: from start of 2026-05-13 in Asia/Jakarta (not UTC midnight on the 13th). */
-const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-05-13 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-08-17 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 const isBlitzKickOffWindowOpen = (date = new Date()) => {
 	return date >= BLITZ_KICK_OFF_START && date < BLITZ_KICK_OFF_END;
@@ -262,13 +309,12 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				program_saled_id: "",
 				phone_number,
 				job_title,
-				total_points: SIGNUP_WELCOME_POINTS,
-				accomplishment_total_points: SIGNUP_WELCOME_POINTS,
-				lifetime_total_points: SIGNUP_WELCOME_POINTS,
 				fullname,
 				referral_code: newReferralCode,
 				referred_by: referrerId,
 			}, { transaction });
+
+			await awardPoints(user.user_id, SIGNUP_WELCOME_POINTS, { transaction });
 
 			// Create verification token
 			await VerificationToken.create({
@@ -307,7 +353,7 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				company: user.company?.name ?? null,
 				phone_number: user.phone_number ?? null,
 				job_title: user.job_title ?? null,
-				user_point: user.total_points,
+				user_point: SIGNUP_WELCOME_POINTS,
 				referral_code: user.referral_code,
 			};
 
@@ -368,6 +414,12 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 					as: "referrer",
 					attributes: ["username", "referral_code", "user_type"],
 				},
+				{
+					model: UserPhasePoint,
+					attributes: ["campaign_id", "earned_points", "remaining_points", "spent_points"],
+					separate: true,
+					include: [{ model: Campaign, attributes: ["phase", "name", "starts_at", "ends_at"] }],
+				},
 			],
 		});
 
@@ -419,6 +471,15 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 			referred_user_type: plainUser.referrer?.user_type === 'T1' ? 'Distributor' : 
 								plainUser.referrer?.user_type === 'T2' ? 'Partner' : 
 								plainUser.referrer?.user_type || null,
+			phase_points: (plainUser.user_phase_points || [])
+				.map((row: any) => ({
+					phase: row.campaign?.phase,
+					name: row.campaign?.name,
+					earned_points: row.earned_points,
+					remaining_points: row.remaining_points,
+					spent_points: row.spent_points,
+				}))
+				.sort((a: { phase: number }, b: { phase: number }) => (a.phase || 0) - (b.phase || 0)),
 		};
 
 		// Basic response validation: Check required fields
@@ -548,6 +609,7 @@ export const getUserList = async (req: CustomRequest, res: Response) => {
 					model: Company,
 					attributes: ["name"],
 				},
+				phasePointsInclude,
 			],
 			order: [[sortField, orderDirection]],
 			limit,
@@ -562,8 +624,11 @@ export const getUserList = async (req: CustomRequest, res: Response) => {
 				referrer_username: plainUser.referrer?.username || null,
 				company_name: plainUser.company?.name || null,
 				referral_code: plainUser.referral_code || null,
+				phase7_earned_points: earnedPointsForPhase(plainUser.user_phase_points, 7),
+				phase8_earned_points: earnedPointsForPhase(plainUser.user_phase_points, 8),
 				referrer: undefined,
 				company: undefined,
+				user_phase_points: undefined,
 				created_at: dayjs(plainUser.createdAt).format("DD MMM YYYY HH:mm"),
 			};
 		});
@@ -914,32 +979,30 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
 			updateData.fullname = fullname;
 		}
 
-		// Add points to updateData if provided
-		if (points !== undefined) {
-			updateData.total_points = sequelize.literal(`total_points + ${points}`);
-			updateData.accomplishment_total_points = sequelize.literal(`accomplishment_total_points + ${points}`);
-			updateData.lifetime_total_points = sequelize.literal(`lifetime_total_points + ${points}`);
-		}
+		if (Object.keys(updateData).length > 0) {
+			const [updatedRowsCount] = await User.update(
+				updateData,
+				{
+					where: { user_id: userId },
+					transaction
+				},
+			);
 
-		// Update the user's data
-		const [updatedRowsCount] = await User.update(
-			updateData,
-			{
-				where: { user_id: userId },
-				transaction
-			},
-		);
-
-		if (updatedRowsCount === 0) {
+			if (updatedRowsCount === 0) {
+				await transaction.rollback();
+				return res
+					.status(400)
+					.json({ message: "User not found or no changes made." });
+			}
+		} else if (points === undefined) {
 			await transaction.rollback();
 			return res
 				.status(400)
 				.json({ message: "User not found or no changes made." });
 		}
 
-		// Handle points update if provided
 		if (points !== undefined) {
-			// Create point transaction record
+			await awardPoints(userId, Number(points), { transaction });
 			await PointTransaction.create(
 				{
 					user_id: userId,
@@ -1147,11 +1210,16 @@ export const getReferredUsers = async (req: CustomRequest, res: Response) => {
 			});
 		}
 
-		// Find all users who used this referral code and have submitted at least one form
+		const campaign = await Campaign.resolveAt();
+		const campaignReplacements = campaignWindowReplacements(campaign);
+
+		// Referred users whose first form is in the current campaign (2,000 bonus trigger)
 		const referredUsers = await User.findAll({
 			where: {
-				referred_by: userId
+				referred_by: userId,
+				[Op.and]: sequelize.literal(FIRST_FORM_IN_CAMPAIGN_SQL),
 			},
+			replacements: campaignReplacements,
 			attributes: [
 				'user_id',
 				'username',
@@ -1166,11 +1234,6 @@ export const getReferredUsers = async (req: CustomRequest, res: Response) => {
 					model: Company,
 					attributes: ['name']
 				},
-				{
-					model: Form,
-					attributes: [],
-					required: true, // This ensures users have at least one form
-				}
 			],
 			order: [['createdAt', 'DESC']]
 		});
@@ -1194,6 +1257,11 @@ export const getReferredUsers = async (req: CustomRequest, res: Response) => {
 			message: "List of referred users with form submissions",
 			referral_code: currentUser.referral_code,
 			total_referrals: transformedUsers.length,
+			referral_bonus_points: getReferralBonusPointsFromSubmissionCount(transformedUsers.length),
+			campaign: {
+				phase: campaign.phase,
+				name: campaign.name,
+			},
 			data: transformedUsers
 		});
 
@@ -1260,6 +1328,7 @@ export const downloadUserList = async (req: CustomRequest, res: Response) => {
 					model: Company,
 					attributes: ["name"],
 				},
+				phasePointsInclude,
 			],
 			order: [[sortField, orderDirection]],
 		});
@@ -1272,6 +1341,8 @@ export const downloadUserList = async (req: CustomRequest, res: Response) => {
 				referrer_username: plainUser.referrer?.username || null,
 				company_name: plainUser.company?.name || null,
 				referral_code: plainUser.referral_code || null,
+				phase7_earned_points: earnedPointsForPhase(plainUser.user_phase_points, 7),
+				phase8_earned_points: earnedPointsForPhase(plainUser.user_phase_points, 8),
 				created_at: dayjs(plainUser.createdAt).format("DD MMM YYYY HH:mm"),
 			};
 		});
@@ -1296,6 +1367,8 @@ export const downloadUserList = async (req: CustomRequest, res: Response) => {
 				key: "accomplishment_total_points",
 				width: 12,
 			},
+			{ header: "Phase 7 Earned", key: "phase7_earned_points", width: 14 },
+			{ header: "Phase 8 Earned", key: "phase8_earned_points", width: 14 },
 			{ header: "Lifetime Points", key: "lifetime_total_points", width: 12 },
 			{ header: "Referral Code", key: "referral_code", width: 15 },
 			{ header: "Referred By", key: "referrer_username", width: 15 },
@@ -1315,6 +1388,8 @@ export const downloadUserList = async (req: CustomRequest, res: Response) => {
 				job_title: user.job_title || "-",
 				total_points: user.total_points || 0,
 				accomplishment_total_points: user.accomplishment_total_points || 0,
+				phase7_earned_points: user.phase7_earned_points || 0,
+				phase8_earned_points: user.phase8_earned_points || 0,
 				lifetime_total_points: user.lifetime_total_points || 0,
 				referral_code: user.referral_code || "-",
 				referrer_username: user.referrer_username || "-",
@@ -1369,7 +1444,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
-						AND referred.created_at >= '2026-05-13T00:00:00.000Z'
+						AND referred.created_at >= '2026-08-17T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1388,7 +1463,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-05-13T00:00:00.000Z'
+				AND referred.created_at >= '2026-08-17T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1399,7 +1474,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-05-13T00:00:00.000Z'
+				AND referred.created_at >= '2026-08-17T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1444,7 +1519,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
-							AND referred.created_at >= '2026-05-13T00:00:00.000Z'
+							AND referred.created_at >= '2026-08-17T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 
@@ -1485,12 +1560,16 @@ export const getCurrentUserReferrals = async (req: CustomRequest, res: Response)
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
 		const offset = (page - 1) * limit;
+		const campaign = await Campaign.resolveAt();
+		const campaignReplacements = campaignWindowReplacements(campaign);
+		const inCampaignWhere = {
+			referred_by: userId,
+			[Op.and]: sequelize.literal(REFERRAL_IN_CAMPAIGN_SQL),
+		};
 
-		// Get all referred users with pagination
 		const referredUsers = await User.findAll({
-			where: {
-				referred_by: userId
-			},
+			where: inCampaignWhere,
+			replacements: campaignReplacements,
 			attributes: [
 				'username',
 				'fullname',
@@ -1500,6 +1579,8 @@ export const getCurrentUserReferrals = async (req: CustomRequest, res: Response)
 						FROM forms
 						WHERE forms.user_id = "User".user_id
 						AND forms.status != 'rejected'
+						AND forms.created_at >= :campaignStartsAt
+						AND (:campaignEndsAt IS NULL OR forms.created_at < :campaignEndsAt)
 					)`),
 					'submitted_forms_count'
 				]
@@ -1514,12 +1595,17 @@ export const getCurrentUserReferrals = async (req: CustomRequest, res: Response)
 			]
 		});
 
-		// Get total count for pagination
-		const totalCount = await User.count({
-			where: {
-				referred_by: userId
+		const countRows = await sequelize.query<{ total: string | number }>(
+			`SELECT COUNT(*)::int AS total
+			 FROM users AS "User"
+			 WHERE "User".referred_by = :userId
+			   AND ${REFERRAL_IN_CAMPAIGN_SQL}`,
+			{
+				replacements: { userId, ...campaignReplacements },
+				type: QueryTypes.SELECT,
 			}
-		});
+		);
+		const totalCount = Number(countRows[0]?.total || 0);
 
 		const totalPages = Math.ceil(totalCount / limit);
 

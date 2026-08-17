@@ -15,13 +15,14 @@ import { UserAction } from "../../models/UserAction";
 import { getUserType } from "../utils";
 import { CustomRequest } from "../types/api";
 import { getProductFlowAvailableStock, getStockAllocationAvailability } from "../services/productStockAllocation";
+import { awardPoints } from "../services/userPhasePoints";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const SPIN_START_TZ = "Asia/Jakarta";
 /** Spins on or after this instant count toward MAX_SPINS (start of 2026-05-13 in Jakarta / WIB). */
-const SPIN_START_DATE = dayjs.tz("2026-05-13 00:00:00", SPIN_START_TZ).toDate();
+const SPIN_START_DATE = dayjs.tz("2026-08-17 00:00:00", SPIN_START_TZ).toDate();
 const MAX_SPINS = 2;
 const WHEEL_PRODUCT_ID = 28;
 
@@ -263,10 +264,7 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 		}
 
 		if (selectedSegment.type === 'points' && selectedSegment.points_reward > 0) {
-			user.total_points = (user.total_points || 0) + selectedSegment.points_reward;
-			user.accomplishment_total_points = (user.accomplishment_total_points || 0) + selectedSegment.points_reward;
-			user.lifetime_total_points = (user.lifetime_total_points || 0) + selectedSegment.points_reward;
-			await user.save({ transaction });
+			await awardPoints(userId, selectedSegment.points_reward, { transaction });
 
 			await PointTransaction.create({
 				user_id: userId,

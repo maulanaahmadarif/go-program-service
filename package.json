@@ -8,6 +8,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "worker": "ts-node-dev --respawn --transpile-only src/workers/index.ts",
     "build": "tsc",
+    "migrate": "sequelize-cli db:migrate",
     "serve": "tsc && node dist/index.js",
     "start:worker": "node dist/src/workers/index.js"
   },

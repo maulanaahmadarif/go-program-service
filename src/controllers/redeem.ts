@@ -14,12 +14,14 @@ import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queu
 import { invalidateCacheByPrefix } from '../middleware/cache';
 import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
 import { getStockAllocationAvailability, ProductStockFlowType } from '../services/productStockAllocation';
+import { spendPoints, restoreSpentPoints } from '../services/userPhasePoints';
 import {
   getRedemptionFlowLabel,
   isValidRedemptionFlowFilter,
   redemptionFlowWhereClause,
   REDEMPTION_NOTE_REFERRAL,
   REDEMPTION_NOTE_SPIN_WHEEL,
+  REDEMPTION_NOTE_THREE_DAY_QUEST,
 } from '../utils/redemptionFlow';
 
 const findLockedUser = (userId: number, transaction: Transaction) =>
@@ -37,6 +39,7 @@ const findLockedProduct = (productId: number, transaction: Transaction) =>
 const getRedemptionFlowType = (notes?: string | null): ProductStockFlowType => {
   if (notes === REDEMPTION_NOTE_SPIN_WHEEL) return 'spin_wheel';
   if (notes === REDEMPTION_NOTE_REFERRAL) return 'referral';
+  if (notes === REDEMPTION_NOTE_THREE_DAY_QUEST) return 'three_day_quest';
   return 'redeem';
 };
 
@@ -273,9 +276,8 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       description: `Spent ${requiredPoints} points to redeem ${product.name}`
     }, { transaction });
 
-    // Update user points
+    await spendPoints(user.user_id, requiredPoints, { transaction });
     user.total_points = (user.total_points || 0) - requiredPoints;
-    await user.save({ transaction });
 
     if (redeemStock.allocation) {
       redeemStock.allocation.used_stock = (redeemStock.allocation.used_stock || 0) + 1;
@@ -800,14 +802,7 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       { where: { redemption_id }, transaction }
     );
 
-    await User.update({
-      total_points: sequelize.literal(`total_points + ${redeemDetail.points_spent}`),
-      accomplishment_total_points: sequelize.literal(`accomplishment_total_points + ${redeemDetail.points_spent}`),
-      lifetime_total_points: sequelize.literal(`lifetime_total_points + ${redeemDetail.points_spent}`)
-    }, {
-      where: { user_id: user.user_id },
-      transaction
-    });
+    await restoreSpentPoints(user.user_id, redeemDetail.points_spent, { transaction });
 
     const flowType = getRedemptionFlowType(redeemDetail.notes);
     const stockAllocation = await getStockAllocationAvailability(productDetail.product_id, flowType, transaction);

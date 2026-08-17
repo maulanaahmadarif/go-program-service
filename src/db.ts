@@ -19,6 +19,9 @@ import { ProductStockAllocation } from "../models/ProductStockAllocation";
 import { DailyCheckin } from "../models/DailyCheckin";
 import { DailyCheckinRewardTier } from "../models/DailyCheckinRewardTier";
 import { CoinTransaction } from "../models/CoinTransaction";
+import { Campaign } from "../models/Campaign";
+import { UserPhasePoint } from "../models/UserPhasePoint";
+import { ThreeDayQuest } from "../models/ThreeDayQuest";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -49,6 +52,9 @@ export const sequelize = new Sequelize({
 		DailyCheckin,
 		DailyCheckinRewardTier,
 		CoinTransaction,
+		Campaign,
+		UserPhasePoint,
+		ThreeDayQuest,
 	],
 	dialect: dbConfig.dialect,
 });

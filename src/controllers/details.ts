@@ -8,6 +8,8 @@ import { User } from '../../models/User';
 import { Form } from '../../models/Form';
 import { Project } from '../../models/Project';
 import { FormType } from '../../models/FormType';
+import { UserPhasePoint } from '../../models/UserPhasePoint';
+import { Campaign } from '../../models/Campaign';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import dayjs from 'dayjs';
 import { CustomRequest } from '../types/api';
@@ -81,7 +83,15 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
     // Fetch user and related company information
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password_hash', 'level', 'token', 'token_purpose', 'token_expiration'] },
-      include: [{ association: 'company', attributes: ['name'] }],
+      include: [
+        { association: 'company', attributes: ['name'] },
+        {
+          model: UserPhasePoint,
+          attributes: ['campaign_id', 'earned_points', 'remaining_points', 'spent_points'],
+          separate: true,
+          include: [{ model: Campaign, attributes: ['phase', 'name', 'starts_at', 'ends_at'] }],
+        },
+      ],
     });
 
     // Check if user exists

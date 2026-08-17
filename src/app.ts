@@ -99,14 +99,14 @@ app.use((err: MulterError, req: Request, res: Response, next: NextFunction) => {
   res.status(500).send({ json: 'Something went wrong!' });
 });
 
-// Sync all models with the database (creates tables if they don't exist)
-// sequelize.sync({ alter: true })  // You can add an explicit type for syncDb parameter if needed
-//   .then(() => logger.info('Tables created successfully!'))
-//   .catch((error: Error) => logger.error({ error, stack: error.stack }, 'Error creating tables'));
-
 const startServer = async () => {
   try {
     await sequelize.authenticate();
+
+    if (process.env.NODE_ENV !== 'production') {
+      await sequelize.sync({ alter: true });
+      logger.info('Local schema synced.');
+    }
 
     logger.info("Database connected.");
   } catch (err: any) {

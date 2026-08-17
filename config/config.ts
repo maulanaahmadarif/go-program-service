@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';  // Ensure .env file is loaded
+// sequelize-cli reads config/config.js (same DB_* env vars). Do not add config.json.
 
 // Load environment variables from .env file
 dotenv.config();

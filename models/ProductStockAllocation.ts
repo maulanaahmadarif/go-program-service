@@ -17,7 +17,7 @@ import { Optional } from 'sequelize';
 
 import { Product } from './Product';
 
-export type ProductStockFlowType = 'redeem' | 'spin_wheel' | 'referral' | 'signup' | 'coin';
+export type ProductStockFlowType = 'redeem' | 'spin_wheel' | 'referral' | 'signup' | 'coin' | 'three_day_quest';
 
 export interface ProductStockAllocationAttributes {
   allocation_id?: number;
@@ -47,7 +47,7 @@ export class ProductStockAllocation extends Model<ProductStockAllocationAttribut
   public product_id!: number;
 
   @AllowNull(false)
-  @Column(DataType.ENUM('redeem', 'spin_wheel', 'referral', 'signup', 'coin'))
+  @Column(DataType.ENUM('redeem', 'spin_wheel', 'referral', 'signup', 'coin', 'three_day_quest'))
   public flow_type!: ProductStockFlowType;
 
   @AllowNull(false)

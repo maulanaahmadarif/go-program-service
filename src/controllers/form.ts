@@ -21,7 +21,9 @@ import { DailyCheckin } from '../../models/DailyCheckin';
 import { CoinTransaction } from '../../models/CoinTransaction';
 import { sendEmail } from '../services/brevo';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
-import { calculateBonusPoints, calculateReferralMilestoneBonus } from '../utils/points';
+import { getProductQuantityFromFormData, resolveProductQuantity } from '../utils/formProductQuantity';
+import { calculateBonusPoints, calculateReferralMilestoneBonus, REFERRAL_FIRST_SUBMISSION_BONUS, REFERRAL_REFERRER_BONUS } from '../utils/points';
+import { awardPoints } from '../services/userPhasePoints';
 import { PointTransaction } from '../../models/PointTransaction';
 import { UserMysteryBox } from '../../models/UserMysteryBox';
 import { ExistingCustomer } from '../../models/ExistingCustomer';
@@ -32,6 +34,7 @@ import { invalidateCacheByPrefix } from '../middleware/cache';
 import { REDEMPTION_TIMEZONE } from '../services/redemptionWindow';
 import { isDailyCheckinProgramOpen } from '../services/dailyCheckinWindow';
 import { getMilestoneBonusCoinsForDay, mergeMilestoneBonusClaimedDay, normalizeMilestoneBonusClaimedDays, milestoneBonusEarnedTodayWhere } from '../services/dailyCheckinRewards';
+import { Campaign } from '../../models/Campaign';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -287,11 +290,13 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
       }
     }
 
+    const derivedQuantity = getProductQuantityFromFormData(form_data);
     const submission = await Form.create({
       user_id: userId,
       form_type_id,
       form_data,
       project_id,
+      product_quantity: derivedQuantity > 0 ? derivedQuantity : Math.max(0, Number(product_quantity) || 0),
       status: 'submitted'
     }, { transaction })
 
@@ -325,29 +330,35 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
       }]
     });
 
-    // Give bonus to newly referred user when they submit their first form
+    // Give bonus to newly referred user and their referrer when they submit their first form
     if (isFirstSubmission && user?.referrer) {
-      const bonusPoints = 400;
+      const refereeBonusPoints = REFERRAL_FIRST_SUBMISSION_BONUS;
+      const referrerBonusPoints = REFERRAL_REFERRER_BONUS;
 
-      // Award 400 points to the newly signed up user
       await PointTransaction.create({
         user_id: user.user_id,
-        points: bonusPoints,
+        points: refereeBonusPoints,
         transaction_type: 'earn',
         description: `First form submission bonus for signing up with referral code`
       }, { transaction });
 
-      user.total_points = (user.total_points || 0) + bonusPoints;
-      user.accomplishment_total_points = (user.accomplishment_total_points || 0) + bonusPoints;
-      user.lifetime_total_points = (user.lifetime_total_points || 0) + bonusPoints;
-      await user.save({ transaction });
+      await awardPoints(user.user_id, refereeBonusPoints, { transaction });
+
+      await PointTransaction.create({
+        user_id: user.referrer.user_id,
+        points: referrerBonusPoints,
+        transaction_type: 'earn',
+        description: `Referral bonus for referred user first milestone submission`
+      }, { transaction });
+
+      await awardPoints(user.referrer.user_id, referrerBonusPoints, { transaction });
 
       firstSubmissionBonus = true;
     }
 
     // Legacy rule: 4 submitted/approved forms completes project through EOD 2026-06-20 in REDEMPTION_TIMEZONE (default Asia/Jakarta)
     const nowInTz = dayjs().tz(REDEMPTION_TIMEZONE);
-    const legacyFourFormRuleEndsExclusive = dayjs.tz('2026-06-21 00:00:00', REDEMPTION_TIMEZONE);
+    const legacyFourFormRuleEndsExclusive = dayjs.tz('2026-09-21 00:00:00', REDEMPTION_TIMEZONE);
     if (nowInTz.isBefore(legacyFourFormRuleEndsExclusive)) {
       if (formsCount === 4) {
         isProjectFormCompleted = true;
@@ -383,11 +394,7 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
           description: `Referral milestone bonus for reaching ${referralMilestone.milestone} referred users with form submissions`
         }, { transaction });
 
-        // Update referrer's points
-        referrer.total_points = (referrer.total_points || 0) + referralMilestone.bonusPoints;
-        referrer.accomplishment_total_points = (referrer.accomplishment_total_points || 0) + referralMilestone.bonusPoints;
-        referrer.lifetime_total_points = (referrer.lifetime_total_points || 0) + referralMilestone.bonusPoints;
-        await referrer.save({ transaction });
+        await awardPoints(referrer.user_id, referralMilestone.bonusPoints, { transaction });
 
       }
     }
@@ -593,14 +600,11 @@ const calculateSubmissionPoints = (formItem: any, completionBonusFormIds: Set<nu
   if (formItem.status === 'approved') {
     base_points = formItem.form_type.point_reward;
 
-    // Derive product quantity from form_data.products[*].numberOfQuantity
-    let product_quantity = 0;
+    const product_quantity = resolveProductQuantity(formItem.product_quantity, formItem.form_data);
     let isAuraEdition = false;
     if (Array.isArray(formItem.form_data)) {
       const productsEntry = formItem.form_data.find((entry: any) => entry.label === 'products');
-      if (productsEntry && Array.isArray(productsEntry.value) && productsEntry.value.length > 0) {
-        const quantity = Number(productsEntry.value[0]?.numberOfQuantity || 0);
-        product_quantity = Number.isFinite(quantity) ? quantity : 0;
+      if (productsEntry && Array.isArray(productsEntry.value)) {
         isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) =>
           product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
         );
@@ -847,8 +851,8 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       whereClause.form_type_id = Number.isNaN(parsedFormTypeId)
         ? form_type_id
         : parsedFormTypeId;
-      const formTypeCreatedFrom = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
-      const formTypeCreatedTo = dayjs.tz('2026-06-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
+      const formTypeCreatedFrom = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+      const formTypeCreatedTo = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
       whereClause.createdAt = {
         [Op.gte]: formTypeCreatedFrom,
         [Op.lte]: formTypeCreatedTo,
@@ -883,7 +887,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
         form_data: plainForm.form_data,
         project_name: plainForm.project.name,
         form_name: plainForm.form_type.form_name,
-        submitted_at: plainForm.createdAt
+        submitted_at: formatSubmissionAt(plainForm.createdAt)
       };
     });
 
@@ -1133,12 +1137,7 @@ export const getReport = async (req: CustomRequest, res: Response) => {
   }
 
   const newForm = forms.map((item) => {
-    let product_quantity = 0;
-    if (item.form_data && Array.isArray(item.form_data) && item.form_data[0]?.value) {
-      if (Array.isArray(item.form_data[0].value)) {
-        product_quantity = item.form_data[0].value[0]?.numberOfQuantity || 0;
-      }
-    }
+    const product_quantity = resolveProductQuantity(item.product_quantity, item.form_data);
 
     // Check if form contains Aura Edition or TKDN Product
     let isAuraEdition = false;
@@ -1198,8 +1197,8 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
     }
 
     // Date filter: 2026-05-13 start through 2026-06-20 EOD in REDEMPTION_TIMEZONE (default Asia/Jakarta)
-    const startDate = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
-    const endDate = dayjs.tz('2026-06-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
+    const startDate = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const endDate = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
 
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
@@ -1279,9 +1278,110 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
   }
 };
 
+const LEADERBOARD_EXCLUDED_USER_IDS = [249, 279, 280, 281, 157, 244];
+const VOLUME_FORM_TYPE_BY_USER_TYPE = { T1: 9, T2: 5 } as const;
+
+export const getVolumeLeaderboard = async (req: CustomRequest, res: Response) => {
+  try {
+    const userType = String(req.query.user_type || '').toUpperCase();
+    if (userType !== 'T1' && userType !== 'T2') {
+      return res.status(400).json({
+        message: 'user_type must be T1 or T2',
+        status: 400,
+      });
+    }
+
+    const formTypeId = VOLUME_FORM_TYPE_BY_USER_TYPE[userType];
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 10));
+    const offset = (page - 1) * limit;
+
+    const campaign = await Campaign.resolveAt();
+    const replacements = {
+      formTypeId,
+      userType,
+      startsAt: campaign.starts_at,
+      endsAt: campaign.ends_at ?? null,
+      excludedIds: LEADERBOARD_EXCLUDED_USER_IDS,
+      limit,
+      offset,
+    };
+
+    const rows = await sequelize.query<{
+      user_id: number;
+      username: string;
+      total_quantity: string | number;
+    }>(
+      `SELECT f.user_id, u.username, SUM(f.product_quantity)::int AS total_quantity
+       FROM forms f
+       INNER JOIN users u ON u.user_id = f.user_id
+       WHERE f.status = 'approved'
+         AND f.form_type_id = :formTypeId
+         AND f.created_at >= :startsAt
+         AND (:endsAt IS NULL OR f.created_at < :endsAt)
+         AND u.user_type = :userType
+         AND u.level = 'CUSTOMER'
+         AND u.is_active = true
+         AND f.user_id NOT IN (:excludedIds)
+       GROUP BY f.user_id, u.username
+       HAVING SUM(f.product_quantity) > 0
+       ORDER BY total_quantity DESC
+       LIMIT :limit OFFSET :offset`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    const countRows = await sequelize.query<{ total_items: string | number }>(
+      `SELECT COUNT(*)::int AS total_items
+       FROM (
+         SELECT f.user_id
+         FROM forms f
+         INNER JOIN users u ON u.user_id = f.user_id
+         WHERE f.status = 'approved'
+           AND f.form_type_id = :formTypeId
+           AND f.created_at >= :startsAt
+           AND (:endsAt IS NULL OR f.created_at < :endsAt)
+           AND u.user_type = :userType
+           AND u.level = 'CUSTOMER'
+           AND u.is_active = true
+           AND f.user_id NOT IN (:excludedIds)
+         GROUP BY f.user_id
+         HAVING SUM(f.product_quantity) > 0
+       ) ranked`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    const totalItems = Number(countRows[0]?.total_items || 0);
+    const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+
+    return res.status(200).json({
+      message: 'Volume leaderboard',
+      campaign: {
+        phase: campaign.phase,
+        name: campaign.name,
+      },
+      data: rows.map((row) => ({
+        user_id: Number(row.user_id),
+        username: row.username,
+        total_quantity: Number(row.total_quantity) || 0,
+      })),
+      pagination: {
+        total_items: totalItems,
+        total_pages: totalPages,
+        current_page: page,
+        items_per_page: limit,
+      },
+    });
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error fetching volume leaderboard');
+    return res.status(500).json({
+      message: 'An error occurred while fetching the volume leaderboard',
+    });
+  }
+};
+
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
-    const championStartDate = dayjs.tz('2026-05-13 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const championStartDate = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
 
     // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 champion in parallel
     const [quotationForms, formType5Forms, formType5Champion] = await Promise.all([
@@ -1454,6 +1554,131 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
     res.status(500).json({ 
       message: 'An error occurred while fetching champions',
       error 
+    });
+  }
+};
+
+const FY2627_MIN_PHASE = 7;
+const FY2627_START = dayjs.tz('2026-05-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+
+type GatheringWinnerRow = {
+  user_id: number;
+  username: string;
+  fullname: string | null;
+  metric: string | number;
+};
+
+type GatheringWinner = {
+  user_id: number;
+  username: string;
+  fullname: string | null;
+  metric: number;
+  unit: 'points' | 'quantity';
+};
+
+function toGatheringWinner(
+  row: GatheringWinnerRow | undefined,
+  unit: GatheringWinner['unit']
+): GatheringWinner | null {
+  if (!row) return null;
+  return {
+    user_id: Number(row.user_id),
+    username: row.username,
+    fullname: row.fullname,
+    metric: Number(row.metric) || 0,
+    unit,
+  };
+}
+
+async function getFy2627TopContributor(userType: 'T1' | 'T2'): Promise<GatheringWinner | null> {
+  const rows = await sequelize.query<GatheringWinnerRow>(
+    `SELECT u.user_id, u.username, u.fullname, SUM(upp.earned_points)::int AS metric
+     FROM user_phase_points upp
+     INNER JOIN users u ON u.user_id = upp.user_id
+     INNER JOIN campaigns c ON c.campaign_id = upp.campaign_id
+     WHERE c.phase >= :minPhase
+       AND u.user_type = :userType
+       AND u.level = 'CUSTOMER'
+       AND u.is_active = true
+       AND u.user_id NOT IN (:excludedIds)
+     GROUP BY u.user_id, u.username, u.fullname
+     HAVING SUM(upp.earned_points) > 0
+     ORDER BY metric DESC, u.user_id ASC
+     LIMIT 1`,
+    {
+      replacements: {
+        minPhase: FY2627_MIN_PHASE,
+        userType,
+        excludedIds: LEADERBOARD_EXCLUDED_USER_IDS,
+      },
+      type: QueryTypes.SELECT,
+    }
+  );
+  return toGatheringWinner(rows[0], 'points');
+}
+
+export const getGatheringFy2627 = async (req: CustomRequest, res: Response) => {
+  try {
+    const replacements = {
+      fyStart: FY2627_START,
+      excludedIds: LEADERBOARD_EXCLUDED_USER_IDS,
+    };
+
+    const [topContributorPartner, topContributorDistributor, newUserRows, volumeRows] = await Promise.all([
+      getFy2627TopContributor('T2'),
+      getFy2627TopContributor('T1'),
+      sequelize.query<GatheringWinnerRow>(
+        `SELECT u.user_id, u.username, u.fullname, SUM(f.product_quantity)::int AS metric
+         FROM forms f
+         INNER JOIN users u ON u.user_id = f.user_id
+         WHERE f.status = 'approved'
+           AND f.form_type_id = 5
+           AND f.created_at >= :fyStart
+           AND f.form_data @> '[{"label":"customerType","value":"New User"}]'::jsonb
+           AND u.level = 'CUSTOMER'
+           AND u.is_active = true
+           AND f.user_id NOT IN (:excludedIds)
+         GROUP BY u.user_id, u.username, u.fullname
+         HAVING SUM(f.product_quantity) > 0
+         ORDER BY metric DESC, u.user_id ASC
+         LIMIT 1`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query<GatheringWinnerRow>(
+        `SELECT u.user_id, u.username, u.fullname, SUM(f.product_quantity)::int AS metric
+         FROM forms f
+         INNER JOIN users u ON u.user_id = f.user_id
+         WHERE f.status = 'approved'
+           AND f.form_type_id IN (5, 9)
+           AND f.created_at >= :fyStart
+           AND u.level = 'CUSTOMER'
+           AND u.is_active = true
+           AND f.user_id NOT IN (:excludedIds)
+         GROUP BY u.user_id, u.username, u.fullname
+         HAVING SUM(f.product_quantity) > 0
+         ORDER BY metric DESC, u.user_id ASC
+         LIMIT 1`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+    ]);
+
+    return res.status(200).json({
+      message: 'Gathering FY2627 recognition retrieved successfully',
+      fy: {
+        label: 'FY2627',
+        starts_at: FY2627_START.toISOString(),
+      },
+      data: {
+        top_contributor_partner: topContributorPartner,
+        top_contributor_distributor: topContributorDistributor,
+        top_sales_new_user: toGatheringWinner(newUserRows[0], 'quantity'),
+        top_volume_sales: toGatheringWinner(volumeRows[0], 'quantity'),
+      },
+    });
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error fetching Gathering FY2627 recognition');
+    return res.status(500).json({
+      message: 'An error occurred while fetching Gathering FY2627 recognition',
     });
   }
 };
