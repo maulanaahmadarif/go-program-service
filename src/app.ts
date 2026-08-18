@@ -103,10 +103,10 @@ const startServer = async () => {
   try {
     await sequelize.authenticate();
 
-    if (process.env.NODE_ENV !== 'production') {
-      await sequelize.sync({ alter: true });
-      logger.info('Local schema synced.');
-    }
+    // if (process.env.NODE_ENV !== 'production') {
+    //   await sequelize.sync({ alter: true });
+    //   logger.info('Local schema synced.');
+    // }
 
     logger.info("Database connected.");
   } catch (err: any) {
