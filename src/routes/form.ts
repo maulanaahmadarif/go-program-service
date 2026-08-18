@@ -14,7 +14,6 @@ import {
 	getFormTypeUsers,
 	getVolumeLeaderboard,
 	getChampions,
-	getGatheringFy2627,
 	enqueueBulkApprove,
 	enqueueBulkReject,
 	getBulkModerationJobStatus,
@@ -34,7 +33,6 @@ router.get("/submission/user", authenticate, getFormSubmissionByUserId);
 router.get("/submission/type-users", authenticate, cacheGet({ keyPrefix: 'cache:form:type-users', ttlSeconds: 30, includeUser: true }), getFormTypeUsers);
 router.get("/volume-leaderboard", authenticate, cacheGet({ keyPrefix: 'cache:form:volume-leaderboard', ttlSeconds: 30, includeUser: true }), getVolumeLeaderboard);
 router.get("/champions", cacheGet({ keyPrefix: 'cache:form:champions', ttlSeconds: 300 }), getChampions);
-router.get("/gathering-fy2627", authenticate, cacheGet({ keyPrefix: 'cache:form:gathering-fy2627', ttlSeconds: 60 }), getGatheringFy2627);
 router.post("/approve/bulk", authenticate, enqueueBulkApprove);
 router.post("/approve/:form_id", authenticate, approveSubmission);
 router.post("/reject/bulk", authenticate, enqueueBulkReject);
