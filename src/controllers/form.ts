@@ -35,6 +35,7 @@ import { REDEMPTION_TIMEZONE } from '../services/redemptionWindow';
 import { isDailyCheckinProgramOpen } from '../services/dailyCheckinWindow';
 import { getMilestoneBonusCoinsForDay, mergeMilestoneBonusClaimedDay, normalizeMilestoneBonusClaimedDays, milestoneBonusEarnedTodayWhere } from '../services/dailyCheckinRewards';
 import { Campaign } from '../../models/Campaign';
+import { LEADERBOARD_EXCLUDED_USER_IDS } from '../constants/leaderboard';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -624,7 +625,12 @@ const calculateSubmissionPoints = (formItem: any, completionBonusFormIds: Set<nu
       }
     }
 
-    bonus_points = calculateBonusPoints(formItem.form_type.form_type_id, product_quantity, isAuraEdition);
+    bonus_points = calculateBonusPoints(
+      formItem.form_type.form_type_id,
+      product_quantity,
+      isAuraEdition,
+      formItem.user?.user_type
+    );
   }
 
   return {
@@ -1150,7 +1156,12 @@ export const getReport = async (req: CustomRequest, res: Response) => {
       }
     }
 
-    const bonus_point = calculateBonusPoints(item.form_type.form_type_id, product_quantity, isAuraEdition);
+    const bonus_point = calculateBonusPoints(
+      item.form_type.form_type_id,
+      product_quantity,
+      isAuraEdition,
+      item.user?.user_type
+    );
 
     return {
       username: item.user.username,
@@ -1278,7 +1289,6 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
   }
 };
 
-const LEADERBOARD_EXCLUDED_USER_IDS = [249, 279, 280, 281, 157, 244];
 const VOLUME_FORM_TYPE_BY_USER_TYPE = { T1: 9, T2: 5 } as const;
 
 export const getVolumeLeaderboard = async (req: CustomRequest, res: Response) => {

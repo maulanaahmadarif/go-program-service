@@ -27,6 +27,7 @@ import { awardPoints } from "../services/userPhasePoints";
 import { UserPhasePoint } from "../../models/UserPhasePoint";
 import { Campaign } from "../../models/Campaign";
 import { getReferralBonusPointsFromSubmissionCount } from "../utils/points";
+import { LEADERBOARD_EXCLUDED_USER_IDS } from "../constants/leaderboard";
 
 /** One-time points granted when a customer completes self-service registration (`userSignup`). */
 const SIGNUP_WELCOME_POINTS = 400;
@@ -561,7 +562,7 @@ export const getUserList = async (req: CustomRequest, res: Response) => {
 		// Exclude specific user IDs if leaderboard=true
 		if (leaderboard === 'true') {
 			whereCondition.user_id = {
-				[Op.notIn]: [249, 279, 280, 281, 157, 244]
+				[Op.notIn]: LEADERBOARD_EXCLUDED_USER_IDS
 			};
 		}
 

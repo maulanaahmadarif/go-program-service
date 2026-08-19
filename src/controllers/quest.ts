@@ -1,8 +1,9 @@
 import { Response } from 'express';
-import { Op, Transaction } from 'sequelize';
+import { Op, QueryTypes, Transaction } from 'sequelize';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import ExcelJS from 'exceljs';
 
 import { CustomRequest } from '../types/api';
 import { sequelize } from '../db';
@@ -349,6 +350,234 @@ export const claimQuestReward = async (req: CustomRequest, res: Response) => {
   } catch (error: any) {
     await transaction.rollback();
     req.log.error({ error, stack: error.stack }, 'Error claiming 3 Day Quest reward');
+    return res.status(500).json({ message: 'Something went wrong' });
+  }
+};
+
+type AdminQuestStatus = 'in_progress' | 'ready_to_claim' | 'claimed' | 'failed';
+
+type AdminQuestRow = {
+  quest_id: number;
+  user_id: number;
+  username: string;
+  fullname: string | null;
+  email: string;
+  phone_number: string | null;
+  company_name: string | null;
+  started_at: Date;
+  ends_at: Date;
+  claimed_at: Date | null;
+  reward_type: 'voucher' | 'points' | null;
+  redemption_id: number | null;
+  approved_count: number;
+  eligible_count: number;
+  quest_status: AdminQuestStatus;
+};
+
+const ADMIN_QUEST_STATUSES: AdminQuestStatus[] = [
+  'in_progress',
+  'ready_to_claim',
+  'claimed',
+  'failed',
+];
+
+function parseAdminQuestStatus(value: unknown): AdminQuestStatus | null {
+  if (typeof value !== 'string' || !value) return null;
+  return ADMIN_QUEST_STATUSES.includes(value as AdminQuestStatus)
+    ? (value as AdminQuestStatus)
+    : null;
+}
+
+const QUEST_LIST_SELECT_SQL = `
+  SELECT
+    q.quest_id,
+    q.user_id,
+    u.username,
+    u.fullname,
+    u.email,
+    u.phone_number,
+    c.name AS company_name,
+    q.started_at,
+    q.ends_at,
+    q.claimed_at,
+    q.reward_type,
+    q.redemption_id,
+    COALESCE(agg.approved_count, 0)::int AS approved_count,
+    COALESCE(agg.eligible_count, 0)::int AS eligible_count,
+    CASE
+      WHEN q.claimed_at IS NOT NULL THEN 'claimed'
+      WHEN COALESCE(agg.approved_count, 0) >= :requiredCount THEN 'ready_to_claim'
+      WHEN NOW() > q.ends_at AND COALESCE(agg.eligible_count, 0) < :requiredCount THEN 'failed'
+      ELSE 'in_progress'
+    END AS quest_status
+  FROM three_day_quests q
+  INNER JOIN users u ON u.user_id = q.user_id
+  LEFT JOIN companies c ON c.company_id = u.company_id
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*) FILTER (WHERE f.status = 'approved')::int AS approved_count,
+      COUNT(*) FILTER (WHERE f.status IN ('approved', 'submitted', 'pending'))::int AS eligible_count
+    FROM forms f
+    WHERE f.user_id = q.user_id
+      AND f.form_type_id = :formTypeId
+      AND f.created_at >= q.started_at
+      AND f.created_at <= q.ends_at
+  ) agg ON TRUE
+`;
+
+function mapAdminQuestRow(row: AdminQuestRow) {
+  return {
+    quest_id: Number(row.quest_id),
+    user_id: Number(row.user_id),
+    username: row.username,
+    fullname: row.fullname,
+    email: row.email,
+    phone_number: row.phone_number,
+    company_name: row.company_name,
+    started_at: row.started_at,
+    ends_at: row.ends_at,
+    claimed_at: row.claimed_at,
+    reward_type: row.reward_type,
+    redemption_id: row.redemption_id != null ? Number(row.redemption_id) : null,
+    approved_count: Number(row.approved_count) || 0,
+    eligible_count: Number(row.eligible_count) || 0,
+    required_count: QUEST_REQUIRED_POS,
+    quest_status: row.quest_status,
+  };
+}
+
+async function queryAdminQuestRows(args: {
+  status: AdminQuestStatus | null;
+  usernameLike: string | null;
+  limit?: number;
+  offset?: number;
+}) {
+  const replacements: Record<string, unknown> = {
+    formTypeId: QUEST_FORM_TYPE_ID,
+    requiredCount: QUEST_REQUIRED_POS,
+    status: args.status,
+    usernameLike: args.usernameLike,
+  };
+
+  const filterSql = `
+    WHERE (:status IS NULL OR rows.quest_status = :status)
+      AND (:usernameLike IS NULL OR rows.username ILIKE :usernameLike)
+  `;
+
+  const countRows = await sequelize.query<{ total: number }>(
+    `SELECT COUNT(*)::int AS total FROM (${QUEST_LIST_SELECT_SQL}) rows ${filterSql}`,
+    { replacements, type: QueryTypes.SELECT }
+  );
+  const total = Number(countRows[0]?.total) || 0;
+
+  let dataSql = `SELECT * FROM (${QUEST_LIST_SELECT_SQL}) rows ${filterSql} ORDER BY rows.started_at DESC, rows.quest_id DESC`;
+  if (args.limit != null) {
+    dataSql += ' LIMIT :limit OFFSET :offset';
+    replacements.limit = args.limit;
+    replacements.offset = args.offset ?? 0;
+  }
+
+  const rows = await sequelize.query<AdminQuestRow>(dataSql, {
+    replacements,
+    type: QueryTypes.SELECT,
+  });
+
+  return { total, rows: rows.map(mapAdminQuestRow) };
+}
+
+export const getQuestList = async (req: CustomRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10) || 10));
+    const offset = (page - 1) * limit;
+    const status = parseAdminQuestStatus(req.query.status);
+    if (req.query.status && !status) {
+      return res.status(400).json({
+        message: `status must be one of: ${ADMIN_QUEST_STATUSES.join(', ')}`,
+      });
+    }
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    const usernameLike = username ? `%${username}%` : null;
+
+    const { total, rows } = await queryAdminQuestRows({
+      status,
+      usernameLike,
+      limit,
+      offset,
+    });
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return res.status(200).json({
+      message: '3 Day Quest list retrieved successfully',
+      data: rows,
+      pagination: {
+        current_page: page,
+        total_pages: totalPages,
+        total_items: total,
+        items_per_page: limit,
+        has_next_page: page < totalPages,
+        has_prev_page: page > 1,
+      },
+    });
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error fetching 3 Day Quest list');
+    return res.status(500).json({ message: 'Something went wrong' });
+  }
+};
+
+export const downloadQuestList = async (req: CustomRequest, res: Response) => {
+  try {
+    const status = parseAdminQuestStatus(req.query.status);
+    if (req.query.status && !status) {
+      return res.status(400).json({
+        message: `status must be one of: ${ADMIN_QUEST_STATUSES.join(', ')}`,
+      });
+    }
+    const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+    const usernameLike = username ? `%${username}%` : null;
+
+    const { rows } = await queryAdminQuestRows({ status, usernameLike });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('three_day_quests');
+    worksheet.columns = [
+      { header: 'No', key: 'no', width: 5 },
+      { header: 'Username', key: 'username', width: 18 },
+      { header: 'Company', key: 'company', width: 24 },
+      { header: 'Fullname', key: 'fullname', width: 22 },
+      { header: 'Email', key: 'email', width: 28 },
+      { header: 'Phone Number', key: 'phone_number', width: 16 },
+      { header: 'Started At', key: 'started_at', width: 20 },
+      { header: 'Ends At', key: 'ends_at', width: 20 },
+      { header: 'Progress', key: 'progress', width: 12 },
+      { header: 'Status', key: 'status', width: 16 },
+      { header: 'Reward Type', key: 'reward_type', width: 14 },
+      { header: 'Claimed At', key: 'claimed_at', width: 20 },
+    ];
+
+    rows.forEach((row, index) => {
+      worksheet.addRow({
+        no: index + 1,
+        username: row.username || '-',
+        company: row.company_name || '-',
+        fullname: row.fullname || '-',
+        email: row.email || '-',
+        phone_number: row.phone_number || '-',
+        started_at: row.started_at ? dayjs(row.started_at).format('DD MMM YYYY HH:mm') : '-',
+        ends_at: row.ends_at ? dayjs(row.ends_at).format('DD MMM YYYY HH:mm') : '-',
+        progress: `${row.approved_count} / ${row.required_count}`,
+        status: row.quest_status,
+        reward_type: row.reward_type || '-',
+        claimed_at: row.claimed_at ? dayjs(row.claimed_at).format('DD MMM YYYY HH:mm') : '-',
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=three_day_quests.xlsx');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error: any) {
+    req.log.error({ error, stack: error.stack }, 'Error downloading 3 Day Quest list');
     return res.status(500).json({ message: 'Something went wrong' });
   }
 };

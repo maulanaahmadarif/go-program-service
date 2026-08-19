@@ -28,10 +28,24 @@ const AURA_MULTIPLIER_BY_TIER: Record<QuantityTier, number> = {
   '>500': 8,
 };
 
+/** Aura / TKDN multiplier applies only to Partner PO/Invoice and Distributor PO/Invoice. */
+const AURA_TKDN_MULTIPLIER_FORM_TYPES: Record<'T1' | 'T2', ReadonlySet<number>> = {
+  T2: new Set([5, 6]),
+  T1: new Set([9, 10]),
+};
+
+function isAuraTkdnMultiplierEligible(formTypeId: number, userType?: string | null): boolean {
+  if (userType === 'T2' || userType === 'T1') {
+    return AURA_TKDN_MULTIPLIER_FORM_TYPES[userType].has(formTypeId);
+  }
+  return AURA_TKDN_MULTIPLIER_FORM_TYPES.T2.has(formTypeId) || AURA_TKDN_MULTIPLIER_FORM_TYPES.T1.has(formTypeId);
+}
+
 export const calculateBonusPoints = (
   formTypeId: number,
   product_quantity: number,
-  isAuraEdition: boolean = false
+  isAuraEdition: boolean = false,
+  userType?: string | null
 ): number => {
   const tier = getQuantityTier(product_quantity);
   if (!tier) return 0;
@@ -41,7 +55,7 @@ export const calculateBonusPoints = (
 
   let bonus_points = pointsByTier[tier] ?? 0;
 
-  if (isAuraEdition) {
+  if (isAuraEdition && isAuraTkdnMultiplierEligible(formTypeId, userType)) {
     bonus_points *= AURA_MULTIPLIER_BY_TIER[tier] ?? 1;
   }
 

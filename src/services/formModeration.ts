@@ -127,7 +127,12 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
       updatedForm.product_quantity,
       updatedForm.form_data
     );
-    const additionalPoint = calculateBonusPoints(updatedForm.form_type_id, effectiveProductQuantity, isAuraEdition);
+    const additionalPoint = calculateBonusPoints(
+      updatedForm.form_type_id,
+      effectiveProductQuantity,
+      isAuraEdition,
+      user.user_type
+    );
     const completionBonus = eligibleForCompletionBonus && approvedSubmissionsCount === 4 ? 200 : 0;
 
     const basePoints = formType.point_reward;
