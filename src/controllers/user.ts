@@ -241,6 +241,10 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 		// Normalize email to lowercase
 		const normalizedEmail = email?.toLowerCase().trim();
 
+		// Referral codes are optional for both T1 (Distributor) and T2 (Partner/Reseller) signups.
+		const normalizedReferralCode =
+			typeof referral_code === 'string' ? referral_code.trim().toUpperCase() : '';
+
 		// // Check if email is from fokustarget.com domain
 		// if (!normalizedEmail.toLowerCase().endsWith('@fokustarget.com')) {
 		// 	return res.status(401).json({ 
@@ -261,12 +265,14 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 			return res.status(400).json({ message: "Username is already taken" });
 		}
 
-		// Check if referral code exists if provided
-		if (referral_code) {
-			const referrer = await User.findOne({ where: { referral_code } });
+		// Validate referral code once if provided
+		let referrerId: number | undefined = undefined;
+		if (normalizedReferralCode) {
+			const referrer = await User.findOne({ where: { referral_code: normalizedReferralCode } });
 			if (!referrer) {
 				return res.status(400).json({ message: "Invalid referral code" });
 			}
+			referrerId = referrer.user_id;
 		}
 
 		// Hash the password
@@ -282,16 +288,6 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				industry: "Custom Company",
 			});
 			normalize_company_id = customCompany.company_id;
-		}
-
-		// Check if referral code exists
-		let referrerId: number | undefined = undefined;
-		let referrer: User | null = null;
-		if (referral_code) {
-			referrer = await User.findOne({ where: { referral_code } });
-			if (referrer) {
-				referrerId = referrer.user_id;
-			}
 		}
 
 		// Generate unique referral code for new user
