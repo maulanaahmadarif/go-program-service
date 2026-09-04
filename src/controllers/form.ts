@@ -857,7 +857,7 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       whereClause.form_type_id = Number.isNaN(parsedFormTypeId)
         ? form_type_id
         : parsedFormTypeId;
-      const formTypeCreatedFrom = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+      const formTypeCreatedFrom = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
       const formTypeCreatedTo = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
       whereClause.createdAt = {
         [Op.gte]: formTypeCreatedFrom,
@@ -1208,7 +1208,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
     }
 
     // Date filter: 2026-05-13 start through 2026-06-20 EOD in REDEMPTION_TIMEZONE (default Asia/Jakarta)
-    const startDate = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const startDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
     const endDate = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
 
     // First get all users with their form type submission counts using a subquery
@@ -1391,7 +1391,7 @@ export const getVolumeLeaderboard = async (req: CustomRequest, res: Response) =>
 
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
-    const championStartDate = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const championStartDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
 
     // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 champion in parallel
     const [quotationForms, formType5Forms, formType5Champion] = await Promise.all([

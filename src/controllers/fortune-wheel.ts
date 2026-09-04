@@ -22,7 +22,7 @@ dayjs.extend(timezone);
 
 const SPIN_START_TZ = "Asia/Jakarta";
 /** Spins on or after this instant count toward MAX_SPINS (start of 2026-05-13 in Jakarta / WIB). */
-const SPIN_START_DATE = dayjs.tz("2026-08-17 00:00:00", SPIN_START_TZ).toDate();
+const SPIN_START_DATE = dayjs.tz("2026-09-01 00:00:00", SPIN_START_TZ).toDate();
 const MAX_SPINS = 2;
 const WHEEL_PRODUCT_ID = 28;
 

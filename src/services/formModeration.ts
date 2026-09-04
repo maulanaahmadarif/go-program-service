@@ -41,7 +41,7 @@ export interface ApproveFormResult {
 }
 
 /** Form type 4 milestone window in REDEMPTION_TIMEZONE (default Asia/Jakarta): 2026-05-13 start through 2026-06-20 EOD */
-const type4StartDate = dayjs.tz('2026-08-17 00:00:00', REDEMPTION_TIMEZONE).toDate();
+const type4StartDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
 /** Shared campaign end: inclusive through end of 2026-06-20 in Jakarta (completion bonus + type 4 window). */
 const CAMPAIGN_END_JAKARTA = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day');
 const type4EndDate = CAMPAIGN_END_JAKARTA.toDate();

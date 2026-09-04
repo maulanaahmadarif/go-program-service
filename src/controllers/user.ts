@@ -84,11 +84,11 @@ const BLITZ_KICK_OFF_TZ = "Asia/Jakarta";
 const BLITZ_KICK_OFF_PRODUCT_ID = 23;
 const BLITZ_KICK_OFF_NOTE = "Blitz Kick-Off";
 /** Inclusive Blitz Kick-Off day in Jakarta/WIB through local 23:59:59 — [2026-05-27 00:00, 2026-05-28 00:00). */
-const BLITZ_KICK_OFF_START = dayjs.tz("2026-08-17 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
-const BLITZ_KICK_OFF_END = dayjs.tz("2026-08-18 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_START = dayjs.tz("2026-09-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_END = dayjs.tz("2026-09-02 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 /** Approved-form counts: from start of 2026-05-13 in Asia/Jakarta (not UTC midnight on the 13th). */
-const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-08-17 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-09-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 const isBlitzKickOffWindowOpen = (date = new Date()) => {
 	return date >= BLITZ_KICK_OFF_START && date < BLITZ_KICK_OFF_END;
@@ -1441,7 +1441,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
-						AND referred.created_at >= '2026-08-17T00:00:00.000Z'
+						AND referred.created_at >= '2026-09-01T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1460,7 +1460,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-08-17T00:00:00.000Z'
+				AND referred.created_at >= '2026-09-01T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1471,7 +1471,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-08-17T00:00:00.000Z'
+				AND referred.created_at >= '2026-09-01T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1516,7 +1516,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
-							AND referred.created_at >= '2026-08-17T00:00:00.000Z'
+							AND referred.created_at >= '2026-09-01T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 
