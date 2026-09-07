@@ -1431,7 +1431,7 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
         AND f.created_at >= :championStart
       GROUP BY u.user_id, u.username, u.fullname, u.email, u.total_points
       ORDER BY approved_submissions_count DESC, u.total_points DESC
-      LIMIT 1
+      LIMIT 2
     `, { type: QueryTypes.SELECT, replacements: { championStart: championStartDate } })
     ]);
 
@@ -1551,6 +1551,7 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
       tkdn_champion: tkdnChampion,
       aura_champion: auraChampion,
       close_deal_champion: formType5Champion[0] || null,
+      close_deal_runner_up: formType5Champion[1] || null,
       close_deal_new_customer_champion: closeDealNewCustomerChampion
     };
 
