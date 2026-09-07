@@ -1272,12 +1272,16 @@ export const getReferredUsers = async (req: CustomRequest, res: Response) => {
 
 export const downloadUserList = async (req: CustomRequest, res: Response) => {
 	try {
-		const { company_id, user_type, start_date, end_date } = req.query;
+		const { company_id, user_type, start_date, end_date, all_users } = req.query;
 
 		const whereCondition: any = { level: "CUSTOMER", is_active: true };
 
 		if (company_id) {
 			whereCondition.company_id = company_id;
+			delete whereCondition.is_active;
+		}
+
+		if (all_users === 'true') {
 			delete whereCondition.is_active;
 		}
 
