@@ -653,7 +653,7 @@ const getCompletionBonusFormIds = async (forms: any[]): Promise<Set<number>> => 
   const completionTransactions = await PointTransaction.findAll({
     attributes: ['form_id', 'description'],
     where: {
-      transaction_type: 'earn',
+      transaction_type: { [Op.in]: ['earn', 'adjust'] },
       form_id: { [Op.in]: formIds },
       description: { [Op.iLike]: '% completion %' },
     },

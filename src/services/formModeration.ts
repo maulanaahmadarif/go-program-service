@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
-import { Op } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 
 import { sequelize } from '../db';
 import logger from '../utils/logger';
@@ -63,13 +63,48 @@ const parseFormDataFlags = (formData: unknown) => {
   return { isAuraEdition, customerTypeBonus };
 };
 
+const COMPLETION_BONUS_POINTS = 200;
+const COMPLETION_BONUS_DESCRIPTION_PATTERN = '%+ 200 completion%';
+
+const hasProjectCompletionBonus = async (
+  userId: number,
+  projectId: number,
+  transaction: Transaction
+): Promise<boolean> => {
+  const projectForms = await Form.findAll({
+    attributes: ['form_id'],
+    where: { user_id: userId, project_id: projectId },
+    transaction,
+    raw: true,
+  });
+  const formIds = projectForms
+    .map((form) => Number((form as { form_id: number }).form_id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (formIds.length === 0) {
+    return false;
+  }
+
+  const existingBonusCount = await PointTransaction.count({
+    where: {
+      user_id: userId,
+      form_id: { [Op.in]: formIds },
+      transaction_type: { [Op.in]: ['earn', 'adjust'] },
+      description: { [Op.iLike]: COMPLETION_BONUS_DESCRIPTION_PATTERN },
+    },
+    transaction,
+  });
+  return existingBonusCount > 0;
+};
+
 export const approveFormById = async (formId: number): Promise<ApproveFormResult> => {
   const transaction = await sequelize.transaction();
 
   try {
+    // Lock form → user → project so bulk/concurrent approvals of the same project
+    // serialize and the 4th approved form can reliably award the completion bonus.
     const existingForm = await Form.findByPk(formId, {
-      attributes: ['form_id', 'status'],
       transaction,
+      lock: Transaction.LOCK.UPDATE,
     });
     if (!existingForm) {
       throw new ModerationError('Form not found', 404);
@@ -78,9 +113,32 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
       throw new ModerationError('Form is already approved', 400);
     }
 
+    const user = await User.findByPk(existingForm.user_id, {
+      transaction,
+      lock: Transaction.LOCK.UPDATE,
+      attributes: ['user_id', 'username', 'email', 'user_type', 'company_id', 'total_points', 'accomplishment_total_points', 'lifetime_total_points'],
+    });
+    const project = await Project.findByPk(existingForm.project_id, {
+      transaction,
+      lock: Transaction.LOCK.UPDATE,
+      attributes: ['project_id', 'name'],
+    });
+    const formType = await FormType.findByPk(existingForm.form_type_id, {
+      transaction,
+      attributes: ['form_type_id', 'form_name', 'point_reward'],
+    });
+
+    if (!user || !formType || !project) {
+      throw new ModerationError('Required data not found', 404);
+    }
+
     const [numOfAffectedRows, updatedForms] = await Form.update(
       { status: 'approved' },
-      { where: { form_id: formId }, returning: true, transaction }
+      {
+        where: { form_id: formId, status: { [Op.ne]: 'approved' } },
+        returning: true,
+        transaction,
+      }
     );
 
     if (numOfAffectedRows === 0) {
@@ -89,23 +147,11 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
 
     const updatedForm = updatedForms[0];
     const formSubmittedAtJakarta = dayjs(updatedForm.createdAt).tz(REDEMPTION_TIMEZONE);
-    /** 200pt completion bonus when the form was submitted on or before 2026-06-20 EOD in REDEMPTION_TIMEZONE (Jakarta). */
+    /** 200pt completion bonus when the form was submitted on or before campaign end EOD in Jakarta. */
     const eligibleForCompletionBonus =
       formSubmittedAtJakarta.valueOf() <= CAMPAIGN_END_JAKARTA.valueOf();
 
-    const [user, formType, project, approvedSubmissionsCount] = await Promise.all([
-      User.findByPk(updatedForm.user_id, {
-        transaction,
-        attributes: ['user_id', 'username', 'email', 'user_type', 'company_id', 'total_points', 'accomplishment_total_points', 'lifetime_total_points'],
-      }),
-      FormType.findByPk(updatedForm.form_type_id, {
-        transaction,
-        attributes: ['form_type_id', 'form_name', 'point_reward'],
-      }),
-      Project.findByPk(updatedForm.project_id, {
-        transaction,
-        attributes: ['project_id', 'name'],
-      }),
+    const [approvedSubmissionsCount, completionAlreadyAwarded] = await Promise.all([
       eligibleForCompletionBonus
         ? Form.count({
             where: {
@@ -116,11 +162,10 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
             transaction,
           })
         : Promise.resolve(0),
+      eligibleForCompletionBonus
+        ? hasProjectCompletionBonus(updatedForm.user_id, updatedForm.project_id, transaction)
+        : Promise.resolve(true),
     ]);
-
-    if (!user || !formType || !project) {
-      throw new ModerationError('Required data not found', 404);
-    }
 
     const { isAuraEdition, customerTypeBonus } = parseFormDataFlags(updatedForm.form_data);
     const effectiveProductQuantity = resolveProductQuantity(
@@ -133,7 +178,12 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
       isAuraEdition,
       user.user_type
     );
-    const completionBonus = eligibleForCompletionBonus && approvedSubmissionsCount === 4 ? 200 : 0;
+    const completionBonus =
+      eligibleForCompletionBonus &&
+      approvedSubmissionsCount >= 4 &&
+      !completionAlreadyAwarded
+        ? COMPLETION_BONUS_POINTS
+        : 0;
 
     const basePoints = formType.point_reward;
     const totalPoints = basePoints + additionalPoint + completionBonus + customerTypeBonus;
