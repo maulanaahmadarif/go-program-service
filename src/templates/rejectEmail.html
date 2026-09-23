@@ -1,211 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Form Rejection Notification</title>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light only">
+  <title>Milestone submission update</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background-color: #b91c1c;
-      color: #333;
-      padding: 40px 20px;
-      line-height: 1.6;
-      margin: 0;
-    }
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background-color: #ffffff;
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    .header {
-      background-color: #dc2626;
-      color: white;
-      text-align: center;
-      padding: 40px 30px;
-    }
-    .header h2 {
-      color: #ffffff;
-      font-size: 28px;
-      font-weight: 600;
-      margin: 10px 0;
-    }
-    .emoji {
-      font-size: 48px;
-      margin-bottom: 10px;
-    }
-    .content {
-      font-size: 16px;
-      line-height: 1.6;
-      padding: 40px 30px;
-      color: #444;
-    }
-    .highlight {
-      font-weight: 600;
-      color: #dc2626;
-    }
-    .intro {
-      margin-bottom: 20px;
-      color: #555;
-    }
-    .alert-box {
-      background-color: #fee2e2;
-      padding: 25px;
-      border-radius: 8px;
-      margin: 25px 0;
-      border-left: 5px solid #dc2626;
-      color: #991b1b;
-    }
-    .section-title {
-      color: #dc2626;
-      font-weight: 600;
-      font-size: 18px;
-      margin: 25px 0 15px 0;
-    }
-    .info-list {
-      background-color: #f3f4f6;
-      padding: 20px 25px 20px 40px;
-      border-radius: 8px;
-      margin: 15px 0;
-      border-left: 4px solid #dc2626;
-    }
-    .info-list li {
-      margin: 8px 0;
-      color: #444;
-    }
-    .rejection-details {
-      background-color: #fde68a;
-      padding: 25px;
-      border-radius: 8px;
-      margin: 25px 0;
-      border-left: 5px solid #f59e0b;
-      color: #92400e;
-    }
-    .rejection-details ul {
-      margin: 10px 0;
-    }
-    .rejection-details li {
-      margin: 8px 0;
-    }
-    .suggestions {
-      background-color: #e0f2fe;
-      padding: 25px;
-      border-radius: 8px;
-      margin: 25px 0;
-      border-left: 5px solid #0ea5e9;
-      color: #0c4a6e;
-    }
-    .suggestions ul {
-      margin: 10px 0;
-    }
-    .suggestions li {
-      margin: 8px 0;
-    }
-    .encouragement {
-      background-color: #d1fae5;
-      padding: 25px;
-      border-radius: 8px;
-      margin: 25px 0;
-      border-left: 5px solid #10b981;
-      color: #065f46;
-    }
-    .contact-info {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 8px;
-      margin: 25px 0;
-      border-left: 4px solid #667eea;
-    }
-    .contact-info a {
-      color: #667eea;
-      text-decoration: none;
-      font-weight: 600;
-    }
-    .contact-info a:hover {
-      text-decoration: underline;
-    }
-    .signature {
-      margin-top: 30px;
-      color: #666;
-      padding-top: 20px;
-      border-top: 2px solid #e9ecef;
-    }
-    .footer {
-      background-color: #f8f9fa;
-      text-align: center;
-      padding: 30px;
-      border-top: 2px solid #e9ecef;
-      color: #777;
-      font-size: 14px;
-    }
+    body{margin:0;padding:0;background:#f5f1f5;color:#25202a;font-family:Arial,Helvetica,sans-serif}table{border-spacing:0}a{color:#591f57}
+    @media only screen and (max-width:640px){.shell{width:100%!important}.pad{padding-left:24px!important;padding-right:24px!important}.headline{font-size:28px!important;line-height:34px!important}}
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="emoji">❌</div>
-      <h2>Form Submission Rejected</h2>
-    </div>
-
-    <div class="content">
-      <p class="intro">Hi <span class="highlight">{{username}}</span>,</p>
-      
-      <div class="alert-box">
-        <p><strong>⚠️ Important Notice</strong></p>
-        <p>Unfortunately, your submission is rejected. Every point you've earned from this submission will be removed.</p>
-      </div>
-
-      <p>Thank you for your effort on the milestone submission.</p>
-
-      <p class="section-title">Why was your submission rejected?</p>
-      <ul class="info-list">
-        <li>The details you provided do not align with the supporting document.</li>
-        <li>The quality of the document does not meet the standards required for verification.</li>
-      </ul>
-
-      <div class="rejection-details">
-        <p><strong>❌ In this case, your submission is rejected due to:</strong></p>
-        <ul>
-          <li><strong>Project:</strong> {{project}}</li>
-          <li><strong>Milestone:</strong> {{milestone}}</li>
-          <li><strong>Reason:</strong> {{reason}}</li>
-        </ul>
-      </div>
-
-      <div class="suggestions">
-        <p><strong>💡 We suggest you to:</strong></p>
-        <ul>
-          <li>Double-check all details in your submission, including names, dates, amounts, and any specific information.</li>
-          <li>Provide clear and legible documents and be sure to use widely accepted formats, such as JPG or PDF.</li>
-        </ul>
-      </div>
-
-      <div class="encouragement">
-        <p><strong>🔄 Re-submission Welcome</strong></p>
-        <p>However, you are welcome to re-submit your milestone on the Lenovo Go Pro Program. Once your milestone submission is approved, your points will be reissued.</p>
-      </div>
-
-      <div class="contact-info">
-        <p><strong>📞 Need Help?</strong></p>
-        <p>If you have any questions, feel free to contact us at <a href="tel:+6282225329590">+62 822-2532-9590</a> or email us at <a href="mailto:gopro-lenovo.team@fokustarget.com">gopro-lenovo.team@fokustarget.com</a></p>
-      </div>
-
-      <p class="signature">
-        Good luck and cheers, <strong>Lenovo Go Pro Team</strong>
-      </p>
-    </div>
-
-    <div class="footer">
-      <p><strong>Best regards</strong></p>
-      <p>Lenovo Go Pro Program Team</p>
-    </div>
-  </div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Your Lenovo Go Pro milestone submission needs attention.</div>
+  <table role="presentation" width="100%" bgcolor="#f5f1f5"><tr><td align="center" style="padding:32px 12px">
+    <table role="presentation" width="600" class="shell" style="width:600px;max-width:600px;table-layout:fixed;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 28px rgba(50,16,49,.10)">
+      <tr><td bgcolor="#591f57" class="pad" style="padding:28px 40px;border-bottom:6px solid #c72018"><p style="margin:0 0 8px;color:#e5cce3;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase">Lenovo Go Pro · Milestone update</p><h1 class="headline" style="margin:0;color:#fff;font-size:34px;line-height:40px;font-weight:800">Submission needs attention</h1></td></tr>
+      <tr><td class="pad" style="padding:38px 40px">
+        <p style="margin:0 0 18px;font-size:17px;line-height:27px">Hi <strong>{{username}}</strong>,</p>
+        <table role="presentation" width="100%" bgcolor="#fff5f4" style="border:1px solid #f1d0cd;border-left:4px solid #c72018;border-radius:8px"><tr><td style="padding:20px;color:#6f2c27;font-size:15px;line-height:23px"><strong>Your submission was not approved.</strong><br>Any points awarded from this submission will be removed.</td></tr></table>
+        <p style="margin:26px 0 12px;color:#591f57;font-size:18px;font-weight:bold">Submission details</p>
+        <table role="presentation" width="100%" bgcolor="#f8f2f7" style="border:1px solid #e5d6e4;border-radius:12px"><tr><td style="padding:22px"><p style="margin:0 0 6px;color:#6c6470;font-size:12px;text-transform:uppercase;letter-spacing:1px">Project</p><p style="margin:0 0 16px;font-size:15px;font-weight:bold;word-break:break-word">{{project}}</p><p style="margin:0 0 6px;color:#6c6470;font-size:12px;text-transform:uppercase;letter-spacing:1px">Milestone</p><p style="margin:0 0 16px;font-size:15px;font-weight:bold;word-break:break-word">{{milestone}}</p><p style="margin:0 0 6px;color:#6c6470;font-size:12px;text-transform:uppercase;letter-spacing:1px">Reason</p><p style="margin:0;font-size:15px;font-weight:bold;line-height:23px;word-break:break-word">{{reason}}</p></td></tr></table>
+        <p style="margin:26px 0 12px;color:#591f57;font-size:18px;font-weight:bold">Before resubmitting</p>
+        <table role="presentation" width="100%" bgcolor="#f8f2f7" style="border-left:4px solid #591f57;border-radius:8px"><tr><td style="padding:18px 20px;color:#554d58;font-size:14px;line-height:22px"><strong>1.</strong> Double-check names, dates, amounts, and supporting details.<br><strong>2.</strong> Upload clear, legible documents in an accepted format such as JPG or PDF.<br><strong>3.</strong> Make sure the submitted details match the supporting document.</td></tr></table>
+        <table role="presentation" width="100%" bgcolor="#f3faf6" style="margin-top:18px;border-left:4px solid #238636;border-radius:8px"><tr><td style="padding:18px 20px;color:#30583a;font-size:14px;line-height:22px"><strong>You can submit again.</strong> Once the corrected milestone is approved, the eligible points will be reissued.</td></tr></table>
+        <p style="margin:24px 0 0;color:#6c6470;font-size:13px;line-height:21px">Need help? Call <a href="tel:+6282225329590" style="color:#591f57;font-weight:bold">+62 822-2532-9590</a> or email <a href="mailto:gopro-lenovo.team@fokustarget.com" style="color:#591f57;font-weight:bold">gopro-lenovo.team@fokustarget.com</a>.</p>
+        <p style="margin:24px 0 0;color:#554d58;font-size:15px;line-height:24px">Good luck and cheers,<br><strong style="color:#591f57">Lenovo Go Pro Team</strong></p>
+      </td></tr>
+      <tr><td bgcolor="#2d102c" class="pad" style="padding:22px 40px;color:#ddcedc;font-size:12px;line-height:19px;text-align:center">Lenovo Go Pro Program Team</td></tr>
+    </table>
+  </td></tr></table>
 </body>
 </html>

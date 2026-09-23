@@ -10,6 +10,7 @@ import {
   resetPassword,
   updateUser,
   userSignupConfirmation,
+  resendSignupConfirmation,
   addInternalUser,
   deleteUser,
   activateUser,
@@ -47,6 +48,7 @@ router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 router.post("/update", authenticate, updateUser);
 router.get("/confirmation/:token", userSignupConfirmation);
+router.post("/confirmation/resend", resendSignupConfirmation);
 router.delete("/delete/:user_id", authenticate, deleteUser);
 router.post("/activate", authenticate, activateUser);
 // router.post('/bulk-generate-referral-codes', bulkGenerateReferralCodes)

@@ -43,8 +43,33 @@ export interface WelcomeEmailJobData {
 export interface PasswordResetEmailJobData {
   type: 'password-reset';
   to: string;
+  username: string;
   resetUrl: string;
   userId: number;
+}
+
+export interface SpinWheelConfirmationEmailJobData {
+  type: 'spin-wheel-confirmation';
+  to: string;
+  username: string;
+  rewardType: 'points' | 'product';
+  prizeName: string;
+  pointsAwarded?: number;
+  redemptionId?: number;
+  actionUrl: string;
+  spinId: number;
+}
+
+export interface ThreeDayQuestConfirmationEmailJobData {
+  type: 'three-day-quest-confirmation';
+  to: string;
+  username: string;
+  rewardType: 'points' | 'voucher';
+  rewardName: string;
+  pointsAwarded?: number;
+  redemptionId?: number;
+  actionUrl: string;
+  questId: number;
 }
 
 export interface RedeemApprovalEmailJobData {
@@ -77,6 +102,8 @@ export type EmailJobData =
   | SignupConfirmationEmailJobData
   | WelcomeEmailJobData
   | PasswordResetEmailJobData
+  | SpinWheelConfirmationEmailJobData
+  | ThreeDayQuestConfirmationEmailJobData
   | RedeemApprovalEmailJobData
   | RedeemRejectionEmailJobData;
 
@@ -88,6 +115,8 @@ export const emailNotificationQueue = new Queue<
   | 'signup-confirmation-email'
   | 'welcome-email'
   | 'password-reset-email'
+  | 'spin-wheel-confirmation-email'
+  | 'three-day-quest-confirmation-email'
   | 'redeem-approval-email'
   | 'redeem-rejection-email'
 >(EMAIL_NOTIFICATION_QUEUE, {
@@ -123,8 +152,7 @@ export const enqueueRejectionEmail = async (data: Omit<RejectionEmailJobData, 't
 export const enqueueSignupConfirmationEmail = async (data: Omit<SignupConfirmationEmailJobData, 'type'>) => {
   await emailNotificationQueue.add(
     'signup-confirmation-email',
-    { ...data, type: 'signup-confirmation' },
-    { jobId: `signup-confirmation-${data.userId}` }
+    { ...data, type: 'signup-confirmation' }
   );
 };
 
@@ -139,8 +167,27 @@ export const enqueueWelcomeEmail = async (data: Omit<WelcomeEmailJobData, 'type'
 export const enqueuePasswordResetEmail = async (data: Omit<PasswordResetEmailJobData, 'type'>) => {
   await emailNotificationQueue.add(
     'password-reset-email',
-    { ...data, type: 'password-reset' },
-    { jobId: `password-reset-${data.userId}` }
+    { ...data, type: 'password-reset' }
+  );
+};
+
+export const enqueueSpinWheelConfirmationEmail = async (
+  data: Omit<SpinWheelConfirmationEmailJobData, 'type'>
+) => {
+  await emailNotificationQueue.add(
+    'spin-wheel-confirmation-email',
+    { ...data, type: 'spin-wheel-confirmation' },
+    { jobId: `spin-wheel-confirmation-${data.spinId}` }
+  );
+};
+
+export const enqueueThreeDayQuestConfirmationEmail = async (
+  data: Omit<ThreeDayQuestConfirmationEmailJobData, 'type'>
+) => {
+  await emailNotificationQueue.add(
+    'three-day-quest-confirmation-email',
+    { ...data, type: 'three-day-quest-confirmation' },
+    { jobId: `three-day-quest-confirmation-${data.questId}` }
   );
 };
 
@@ -159,4 +206,3 @@ export const enqueueRedeemRejectionEmail = async (data: Omit<RedeemRejectionEmai
     { jobId: `redeem-rejection-${data.redemptionId}` }
   );
 };
-

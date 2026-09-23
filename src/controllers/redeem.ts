@@ -9,19 +9,22 @@ import { UserAction } from '../../models/UserAction';
 import { sequelize } from '../db';
 import { Product } from '../../models/Product';
 import { PointTransaction } from '../../models/PointTransaction';
+import { CoinTransaction } from '../../models/CoinTransaction';
 import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
 import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queues/emailQueue';
 import { invalidateCacheByPrefix } from '../middleware/cache';
 import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
-import { getStockAllocationAvailability, ProductStockFlowType } from '../services/productStockAllocation';
+import { getStockAllocationAvailability } from '../services/productStockAllocation';
 import { spendPoints, restoreSpentPoints } from '../services/userPhasePoints';
+import {
+  canTransitionRedemption,
+  getPointRedemptionEligibilityError,
+  getRedemptionStockFlowType,
+} from '../services/redemptionPolicy';
 import {
   getRedemptionFlowLabel,
   isValidRedemptionFlowFilter,
   redemptionFlowWhereClause,
-  REDEMPTION_NOTE_REFERRAL,
-  REDEMPTION_NOTE_SPIN_WHEEL,
-  REDEMPTION_NOTE_THREE_DAY_QUEST,
 } from '../utils/redemptionFlow';
 
 const findLockedUser = (userId: number, transaction: Transaction) =>
@@ -35,13 +38,6 @@ const findLockedProduct = (productId: number, transaction: Transaction) =>
     transaction,
     lock: transaction.LOCK.UPDATE,
   });
-
-const getRedemptionFlowType = (notes?: string | null): ProductStockFlowType => {
-  if (notes === REDEMPTION_NOTE_SPIN_WHEEL) return 'spin_wheel';
-  if (notes === REDEMPTION_NOTE_REFERRAL) return 'referral';
-  if (notes === REDEMPTION_NOTE_THREE_DAY_QUEST) return 'three_day_quest';
-  return 'redeem';
-};
 
 type RedeemListFilterParams = {
   status?: string;
@@ -226,7 +222,13 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    const requiredPoints = product.points_required || 0;
+    const eligibilityError = getPointRedemptionEligibilityError(product);
+    if (eligibilityError) {
+      await transaction.rollback();
+      return res.status(400).json({ message: eligibilityError });
+    }
+
+    const requiredPoints = product.points_required;
 
     if ((user.total_points || 0) < requiredPoints) {
       await transaction.rollback();
@@ -378,6 +380,11 @@ export const redeemReferralPoint = async (req: CustomRequest, res: Response) => 
     if (!product) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Referral product not found' });
+    }
+
+    if (!product.is_active) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Referral product is not available' });
     }
 
     const referralStock = await getStockAllocationAvailability(product_id, 'referral', transaction);
@@ -754,10 +761,21 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       return res.status(400).json({ message: 'Redemption ID is required' });
     }
 
-    // Step 1: Get redemption data first, then get related data in parallel
-    const redeemDetail = await Redemption.findByPk(redemption_id, { 
+    // Serialize decisions for the same redemption. Once this lock is acquired,
+    // exactly one request can move the row away from the pending `active` state.
+    const redeemDetail = await Redemption.findByPk(redemption_id, {
       transaction,
-      attributes: ['redemption_id', 'user_id', 'product_id', 'points_spent', 'email', 'status', 'notes']
+      lock: transaction.LOCK.UPDATE,
+      attributes: [
+        'redemption_id',
+        'user_id',
+        'product_id',
+        'points_spent',
+        'coins_spent',
+        'email',
+        'status',
+        'notes',
+      ],
     });
 
     if (!redeemDetail) {
@@ -765,17 +783,33 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       return res.status(404).json({ message: 'Redeem data not found' });
     }
 
-    // Step 2: Get related data in parallel
-    const [user, productDetail] = await Promise.all([
-      User.findByPk(redeemDetail.user_id, { 
-        transaction,
-        attributes: ['user_id', 'username', 'email', 'total_points', 'accomplishment_total_points', 'lifetime_total_points']
-      }),
-      Product.findByPk(redeemDetail.product_id, { 
-        transaction,
-        attributes: ['product_id', 'name', 'stock_quantity']
-      })
-    ]);
+    if (!canTransitionRedemption(redeemDetail.status, 'rejected')) {
+      await transaction.rollback();
+      return res.status(409).json({
+        message: `Redemption has already been ${redeemDetail.status}`,
+        status: redeemDetail.status,
+      });
+    }
+
+    const user = await User.findByPk(redeemDetail.user_id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+      attributes: [
+        'user_id',
+        'username',
+        'email',
+        'total_points',
+        'total_coins',
+        'accomplishment_total_points',
+        'lifetime_total_points',
+      ],
+    });
+
+    const productDetail = await Product.findByPk(redeemDetail.product_id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+      attributes: ['product_id', 'name', 'stock_quantity'],
+    });
 
     // Validate all required data exists
     if (!user) {
@@ -788,38 +822,54 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       return res.status(404).json({ message: 'Product data not found' });
     }
 
-    // Step 2: Create point transaction record for returned points
-    await PointTransaction.create({
-      user_id: user.user_id,
-      points: redeemDetail.points_spent,
-      transaction_type: 'adjust',
-      redemption_id: redemption_id,
-      description: `Returned ${redeemDetail.points_spent} points from rejected redemption of ${productDetail.name}`
-    }, { transaction });
+    const pointsSpent = Math.max(0, redeemDetail.points_spent || 0);
+    const coinsSpent = Math.max(0, redeemDetail.coins_spent || 0);
 
-    await Redemption.update(
-      { status: 'rejected' },
-      { where: { redemption_id }, transaction }
-    );
+    if (pointsSpent > 0) {
+      await PointTransaction.create({
+        user_id: user.user_id,
+        points: pointsSpent,
+        transaction_type: 'adjust',
+        redemption_id: Number(redemption_id),
+        description: `Returned ${pointsSpent} points from rejected redemption of ${productDetail.name}`,
+      }, { transaction });
 
-    await restoreSpentPoints(user.user_id, redeemDetail.points_spent, { transaction });
+      await restoreSpentPoints(user.user_id, pointsSpent, { transaction });
+    }
 
-    const flowType = getRedemptionFlowType(redeemDetail.notes);
+    if (coinsSpent > 0) {
+      await CoinTransaction.create({
+        user_id: user.user_id,
+        coins: coinsSpent,
+        transaction_type: 'adjust',
+        redemption_id: Number(redemption_id),
+        description: `Returned ${coinsSpent} coins from rejected redemption of ${productDetail.name}`,
+      }, { transaction });
+
+      user.total_coins = (user.total_coins || 0) + coinsSpent;
+      await user.save({ transaction });
+    }
+
+    const flowType = getRedemptionStockFlowType(redeemDetail.notes, coinsSpent);
     const stockAllocation = await getStockAllocationAvailability(productDetail.product_id, flowType, transaction);
 
     if (stockAllocation.allocation) {
-      stockAllocation.allocation.used_stock = Math.max(0, (stockAllocation.allocation.used_stock || 0) - 1);
+      if ((stockAllocation.allocation.used_stock || 0) <= 0) {
+        throw new Error(`Cannot restore ${flowType} stock: allocation has no used stock`);
+      }
+
+      stockAllocation.allocation.used_stock = (stockAllocation.allocation.used_stock || 0) - 1;
       await stockAllocation.allocation.save({ transaction });
+    } else if (stockAllocation.hasAnyAllocation) {
+      throw new Error(`Cannot restore stock: no active ${flowType} allocation exists`);
     } else {
-      await Product.update({
-        stock_quantity: sequelize.literal(`stock_quantity + 1`)
-      }, {
-        where: { product_id: productDetail.product_id },
-        transaction
-      });
+      productDetail.stock_quantity = (productDetail.stock_quantity || 0) + 1;
+      await productDetail.save({ transaction });
     }
 
-    // Step 4: Commit transaction first
+    redeemDetail.status = 'rejected';
+    await redeemDetail.save({ transaction });
+
     await transaction.commit();
 
     enqueueRedeemRejectionEmail({
@@ -830,12 +880,15 @@ export const rejectRedeem = async (req: CustomRequest, res: Response) => {
       req.log.error({ error: err, stack: err.stack }, 'Failed enqueue redeem rejection email');
     });
 
-    await invalidateCacheByPrefix('cache:redeem:list');
+    invalidateCacheByPrefix('cache:redeem:list').catch((err: any) => {
+      req.log.error({ error: err, stack: err.stack }, 'Failed to invalidate redemption list cache');
+    });
 
     res.status(200).json({ 
       message: 'Redeem process rejected', 
       status: 200,
-      points_returned: redeemDetail.points_spent
+      points_returned: pointsSpent,
+      coins_returned: coinsSpent,
     });
 
   } catch (error: any) {
@@ -866,10 +919,10 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
       return res.status(400).json({ message: 'Redemption ID is required' });
     }
 
-    // Step 1: Get redemption data first, then get related data in parallel
-    const redeemDetail = await Redemption.findByPk(redemption_id, { 
+    const redeemDetail = await Redemption.findByPk(redemption_id, {
       transaction,
-      attributes: ['redemption_id', 'user_id', 'product_id', 'email', 'fullname', 'phone_number', 'shipping_address', 'postal_code', 'createdAt']
+      lock: transaction.LOCK.UPDATE,
+      attributes: ['redemption_id', 'user_id', 'product_id', 'email', 'fullname', 'phone_number', 'shipping_address', 'postal_code', 'status', 'createdAt'],
     });
 
     if (!redeemDetail) {
@@ -877,17 +930,22 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
       return res.status(404).json({ message: 'Redeem data not found' });
     }
 
-    // Step 2: Get related data in parallel
-    const [user, productDetail] = await Promise.all([
-      User.findByPk(redeemDetail.user_id, { 
-        transaction,
-        attributes: ['user_id', 'username', 'email', 'total_points', 'accomplishment_total_points']
-      }),
-      Product.findByPk(redeemDetail.product_id, { 
-        transaction,
-        attributes: ['product_id', 'name']
-      })
-    ]);
+    if (!canTransitionRedemption(redeemDetail.status, 'approved')) {
+      await transaction.rollback();
+      return res.status(409).json({
+        message: `Redemption has already been ${redeemDetail.status}`,
+        status: redeemDetail.status,
+      });
+    }
+
+    const user = await User.findByPk(redeemDetail.user_id, {
+      transaction,
+      attributes: ['user_id', 'username', 'email', 'total_points', 'accomplishment_total_points'],
+    });
+    const productDetail = await Product.findByPk(redeemDetail.product_id, {
+      transaction,
+      attributes: ['product_id', 'name'],
+    });
 
     // Validate all required data exists
     if (!user) {
@@ -900,13 +958,9 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
       return res.status(404).json({ message: 'Product data not found' });
     }
 
-    // Step 3: Update redemption status atomically
-    await Redemption.update(
-      { status: 'approved' },
-      { where: { redemption_id }, transaction }
-    );
+    redeemDetail.status = 'approved';
+    await redeemDetail.save({ transaction });
 
-    // Step 4: Commit transaction first
     await transaction.commit();
 
     enqueueRedeemApprovalEmail({
@@ -927,7 +981,9 @@ export const approveRedeem = async (req: CustomRequest, res: Response) => {
       req.log.error({ error: err, stack: err.stack }, 'Failed enqueue redeem approval email');
     });
 
-    await invalidateCacheByPrefix('cache:redeem:list');
+    invalidateCacheByPrefix('cache:redeem:list').catch((err: any) => {
+      req.log.error({ error: err, stack: err.stack }, 'Failed to invalidate redemption list cache');
+    });
 
     res.status(200).json({ 
       message: 'Redeem process approved', 

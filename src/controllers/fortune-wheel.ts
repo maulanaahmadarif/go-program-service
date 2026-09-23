@@ -16,6 +16,7 @@ import { getUserType } from "../utils";
 import { CustomRequest } from "../types/api";
 import { getProductFlowAvailableStock, getStockAllocationAvailability } from "../services/productStockAllocation";
 import { awardPoints } from "../services/userPhasePoints";
+import { enqueueSpinWheelConfirmationEmail } from "../queues/emailQueue";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -285,6 +286,23 @@ export const spinWheel = async (req: CustomRequest, res: Response) => {
 
 		await transaction.commit();
 
+		if (selectedSegment.type === 'points') {
+			enqueueSpinWheelConfirmationEmail({
+				to: user.email,
+				username: user.fullname || user.username,
+				rewardType: 'points',
+				prizeName: selectedSegment.option,
+				pointsAwarded: selectedSegment.points_reward,
+				actionUrl: `${process.env.APP_URL}/spin-wheel`,
+				spinId: spin.spin_id,
+			}).catch((err: any) => {
+				req.log.error(
+					{ error: err, stack: err.stack, spinId: spin.spin_id },
+					'Failed enqueue Spin Wheel points confirmation email'
+				);
+			});
+		}
+
 		// Return the result
 		res.status(200).json({
 			message: "Fortune wheel spin successful",
@@ -411,6 +429,21 @@ export const claimFortuneWheelPrize = async (req: CustomRequest, res: Response) 
 		}, { transaction });
 
 		await transaction.commit();
+
+		enqueueSpinWheelConfirmationEmail({
+			to: user.email,
+			username: user.fullname || user.username,
+			rewardType: 'product',
+			prizeName: product.name,
+			redemptionId: redemption.redemption_id,
+			actionUrl: `${process.env.APP_URL}/spin-wheel`,
+			spinId: spin.spin_id,
+		}).catch((err: any) => {
+			req.log.error(
+				{ error: err, stack: err.stack, spinId: spin.spin_id },
+				'Failed enqueue Spin Wheel prize confirmation email'
+			);
+		});
 
 		res.status(200).json({
 			message: 'Spin Wheel prize claim submitted',

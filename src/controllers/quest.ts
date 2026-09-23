@@ -18,6 +18,7 @@ import { getStockAllocationAvailability, getProductFlowAvailableStock } from '..
 import { awardPoints } from '../services/userPhasePoints';
 import { REDEMPTION_TIMEZONE } from '../services/redemptionWindow';
 import { REDEMPTION_NOTE_THREE_DAY_QUEST } from '../utils/redemptionFlow';
+import { enqueueThreeDayQuestConfirmationEmail } from '../queues/emailQueue';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -319,6 +320,21 @@ export const claimQuestReward = async (req: CustomRequest, res: Response) => {
       await quest.save({ transaction });
       await transaction.commit();
 
+      enqueueThreeDayQuestConfirmationEmail({
+        to: t2.user.email,
+        username: t2.user.fullname || t2.user.username,
+        rewardType: 'voucher',
+        rewardName: product.name,
+        redemptionId: redemption.redemption_id,
+        actionUrl: `${process.env.APP_URL}/3-day-quest`,
+        questId: quest.quest_id,
+      }).catch((err: any) => {
+        req.log.error(
+          { error: err, stack: err.stack, questId: quest.quest_id },
+          'Failed enqueue 3 Day Quest voucher confirmation email'
+        );
+      });
+
       return res.status(200).json({
         message: '3 Day Quest voucher claim submitted',
         reward_type: 'voucher',
@@ -341,6 +357,21 @@ export const claimQuestReward = async (req: CustomRequest, res: Response) => {
     quest.reward_type = 'points';
     await quest.save({ transaction });
     await transaction.commit();
+
+    enqueueThreeDayQuestConfirmationEmail({
+      to: t2.user.email,
+      username: t2.user.fullname || t2.user.username,
+      rewardType: 'points',
+      rewardName: `${QUEST_POINTS_FALLBACK.toLocaleString('en-US')} Lenovo Go Pro Points`,
+      pointsAwarded: QUEST_POINTS_FALLBACK,
+      actionUrl: `${process.env.APP_URL}/3-day-quest`,
+      questId: quest.quest_id,
+    }).catch((err: any) => {
+      req.log.error(
+        { error: err, stack: err.stack, questId: quest.quest_id },
+        'Failed enqueue 3 Day Quest points confirmation email'
+      );
+    });
 
     return res.status(200).json({
       message: `3 Day Quest completed. You received ${QUEST_POINTS_FALLBACK} points`,

@@ -31,6 +31,8 @@ import { LEADERBOARD_EXCLUDED_USER_IDS } from "../constants/leaderboard";
 
 /** One-time points granted when a customer completes self-service registration (`userSignup`). */
 const SIGNUP_WELCOME_POINTS = 400;
+const EMAIL_CONFIRMATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 function campaignWindowReplacements(campaign: Campaign) {
 	return {
@@ -116,7 +118,10 @@ export const userLogin = async (req: CustomRequest, res: Response) => {
 		}
 
 		if (!user.is_active) {
-			return res.status(400).json({ message: "Email has not been confirmed" });
+			return res.status(403).json({
+				message: "Please confirm your email before logging in. You can request a new confirmation link below.",
+				code: "EMAIL_NOT_CONFIRMED",
+			});
 		}
 
 		// Generate tokens
@@ -256,7 +261,12 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 		// Check if email already exists
 		const existingEmail = await User.findOne({ where: { email: normalizedEmail } });
 		if (existingEmail) {
-			return res.status(400).json({ message: "Email is already registered" });
+			return res.status(400).json({
+				message: existingEmail.is_active
+					? "Email is already registered"
+					: "This email is registered but not confirmed. Log in to request a new confirmation link.",
+				code: existingEmail.is_active ? "EMAIL_ALREADY_REGISTERED" : "EMAIL_NOT_CONFIRMED",
+			});
 		}
 
 		// Check if username already exists
@@ -318,7 +328,7 @@ export const userSignup = async (req: CustomRequest, res: Response) => {
 				user_id: user.user_id,
 				token: verificationToken,
 				purpose: "EMAIL_CONFIRMATION",
-				expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
+				expires_at: new Date(Date.now() + EMAIL_CONFIRMATION_TOKEN_TTL_MS),
 			}, { transaction });
 
 			const pointTx = await PointTransaction.create(
@@ -670,21 +680,39 @@ export const forgotPassword = async (req: CustomRequest, res: Response) => {
 		if (!user) {
 			return res.status(404).json({ message: "User not found" });
 		}
+		if (!user.is_active) {
+			return res.status(403).json({
+				message: "Please confirm your email before resetting your password. Request a new confirmation link from the login form.",
+				code: "EMAIL_NOT_CONFIRMED",
+			});
+		}
 
 		// Generate a reset token
 		const resetToken = crypto.randomBytes(32).toString("hex");
 
-		// Create or update verification token
-		await VerificationToken.create({
-			user_id: user.user_id,
-			token: resetToken,
-			purpose: "PASSWORD_RESET",
-			expires_at: new Date(Date.now() + 3600000), // 1 hour expiration
-		});
+		// Keep only the newest password reset link valid.
+		const transaction = await sequelize.transaction();
+		try {
+			await VerificationToken.destroy({
+				where: { user_id: user.user_id, purpose: "PASSWORD_RESET" },
+				transaction,
+			});
+			await VerificationToken.create({
+				user_id: user.user_id,
+				token: resetToken,
+				purpose: "PASSWORD_RESET",
+				expires_at: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
+			}, { transaction });
+			await transaction.commit();
+		} catch (error) {
+			await transaction.rollback();
+			throw error;
+		}
 
 		const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}`;
 		enqueuePasswordResetEmail({
 			to: normalizedEmail,
+			username: user.fullname || user.username,
 			resetUrl,
 			userId: user.user_id,
 		}).catch((err: any) => {
@@ -702,20 +730,26 @@ export const userSignupConfirmation = async (req: CustomRequest, res: Response) 
 	try {
 		const { token } = req.params;
 
-		// Find verification token
 		const verificationToken = await VerificationToken.findOne({
 			where: {
 				token,
 				purpose: "EMAIL_CONFIRMATION",
-				expires_at: {
-					[Op.gt]: new Date(),
-				},
 			},
 			include: [{ model: User, as: "user" }],
 		});
 
 		if (!verificationToken || !verificationToken.user) {
-			return res.status(400).json({ message: "Invalid or expired token" });
+			return res.status(400).json({
+				message: "This confirmation link is invalid or has already been used.",
+				code: "CONFIRMATION_TOKEN_INVALID",
+			});
+		}
+
+		if (verificationToken.expires_at <= new Date()) {
+			return res.status(410).json({
+				message: "This confirmation link has expired. Request a new link to continue.",
+				code: "CONFIRMATION_TOKEN_EXPIRED",
+			});
 		}
 
 		const user = verificationToken.user;
@@ -724,7 +758,7 @@ export const userSignupConfirmation = async (req: CustomRequest, res: Response) 
 		user.is_active = true;
 		await user.save();
 
-		// Delete the used verification token
+		// Delete the used confirmation token.
 		await verificationToken.destroy();
 
 		enqueueWelcomeEmail({
@@ -740,6 +774,77 @@ export const userSignupConfirmation = async (req: CustomRequest, res: Response) 
 	} catch (error: any) {
 		req.log.error({ error, stack: error.stack }, "Error confirming email");
 		res.status(500).json({ message: "Something went wrong" });
+	}
+};
+
+export const resendSignupConfirmation = async (req: CustomRequest, res: Response) => {
+	const { email, token } = req.body;
+	const normalizedEmail = typeof email === 'string' ? email.toLowerCase().trim() : '';
+	const normalizedToken = typeof token === 'string' ? token.trim() : '';
+
+	if (!normalizedEmail && !normalizedToken) {
+		return res.status(400).json({ message: 'Email or expired confirmation token is required' });
+	}
+
+	try {
+		let user: User | undefined;
+
+		if (normalizedToken) {
+			const existingToken = await VerificationToken.findOne({
+				where: { token: normalizedToken, purpose: 'EMAIL_CONFIRMATION' },
+				include: [{ model: User, as: 'user' }],
+			});
+			user = existingToken?.user;
+		} else {
+			user = (await User.findOne({ where: { email: normalizedEmail } })) || undefined;
+		}
+
+		if (!user) {
+			return res.status(200).json({
+				message: 'If an unconfirmed account exists, a new confirmation link has been sent.',
+			});
+		}
+
+		if (user.is_active) {
+			return res.status(400).json({
+				message: 'This email address is already confirmed. You can log in now.',
+				code: 'EMAIL_ALREADY_CONFIRMED',
+			});
+		}
+
+		const confirmationToken = crypto.randomBytes(32).toString('hex');
+		const transaction = await sequelize.transaction();
+		try {
+			await VerificationToken.destroy({
+				where: { user_id: user.user_id, purpose: 'EMAIL_CONFIRMATION' },
+				transaction,
+			});
+			await VerificationToken.create({
+				user_id: user.user_id,
+				token: confirmationToken,
+				purpose: 'EMAIL_CONFIRMATION',
+				expires_at: new Date(Date.now() + EMAIL_CONFIRMATION_TOKEN_TTL_MS),
+			}, { transaction });
+			await transaction.commit();
+		} catch (error) {
+			await transaction.rollback();
+			throw error;
+		}
+
+		const confirmationLink = `${process.env.APP_URL}/email-confirmation?token=${confirmationToken}`;
+		enqueueSignupConfirmationEmail({
+			to: user.email,
+			username: user.fullname || user.username,
+			confirmationLink,
+			userId: user.user_id,
+		}).catch((err: any) => {
+			req.log.error({ error: err, stack: err.stack, userId: user?.user_id }, 'Failed enqueue resent signup confirmation email');
+		});
+
+		return res.status(200).json({ message: 'A new confirmation link has been sent. It is valid for 7 days.' });
+	} catch (error: any) {
+		req.log.error({ error, stack: error.stack }, 'Error resending signup confirmation');
+		return res.status(500).json({ message: 'Something went wrong' });
 	}
 };
 
@@ -943,14 +1048,22 @@ export const resetPassword = async (req: CustomRequest, res: Response) => {
 		}
 
 		const user = verificationToken.user;
+		if (!user.is_active) {
+			return res.status(403).json({
+				message: "Please confirm your email before resetting your password.",
+				code: "EMAIL_NOT_CONFIRMED",
+			});
+		}
 
 		// Update the password
 		const hashedPassword = await bcrypt.hash(newPassword, 10);
 		user.password_hash = hashedPassword;
 		await user.save();
 
-		// Delete the used verification token
-		await verificationToken.destroy();
+		// Invalidate every outstanding password reset token after a successful reset.
+		await VerificationToken.destroy({
+			where: { user_id: user.user_id, purpose: "PASSWORD_RESET" },
+		});
 
 		res.status(200).json({ message: "Password updated successfully" });
 	} catch (error: any) {
