@@ -3,13 +3,13 @@ import express from 'express';
 import { redeemPoint, redeemReferralPoint, redeemList, getUserRedemptionList, rejectRedeem, approveRedeem, checkUserRedeemStatus, downloadRedeem, getRedemptionWindowStatus } from '../controllers/redeem';
 import authenticate from '../middleware/auth';
 import requireInternal from '../middleware/requireInternal';
-// import checkDomain from '../middleware/domain';
+import checkDomain from '../middleware/domain';
 import { cacheGet } from '../middleware/cache';
 
 const router = express.Router();
 
 router.get('/redeem-status', getRedemptionWindowStatus);
-router.post('/redeem', authenticate, redeemPoint);
+router.post('/redeem', authenticate, checkDomain, redeemPoint);
 router.post('/redeem-referral', authenticate, redeemReferralPoint);
 router.get('/list', authenticate, requireInternal, cacheGet({ keyPrefix: 'cache:redeem:list', ttlSeconds: 30, includeUser: true }), redeemList);
 router.get('/user-list', authenticate, getUserRedemptionList);

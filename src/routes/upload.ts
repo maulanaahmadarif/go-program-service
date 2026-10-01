@@ -3,13 +3,14 @@ import express from "express";
 import { upload } from "../middleware/upload";
 import { uploadFile, _uploadFileDummy } from "../controllers/upload";
 import authenticate from "../middleware/auth";
-// import checkDomain from "../middleware/domain";
+import checkDomain from "../middleware/domain";
 
 const router = express.Router();
 
 router.post(
 	"/file",	
 	authenticate,
+	checkDomain,
 	upload.single("file"),
 	uploadFile,
 );
