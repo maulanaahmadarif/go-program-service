@@ -10,9 +10,9 @@ const checkEmailDomain = (req: Request, res: Response, next: NextFunction) => {
       });
     }
 
-    // Check if email ends with allowed domains
-    const allowedDomains = ['@fokustarget.com', '@go-program.com'];
-    const isAllowedDomain = allowedDomains.some(domain => email.endsWith(domain));
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const allowedDomains = ['@fokustarget.com', '@go-program.com', '@microsoft.com'];
+    const isAllowedDomain = allowedDomains.some((domain) => normalizedEmail.endsWith(domain));
     
     if (!isAllowedDomain) {
       return res.status(401).json({ 
