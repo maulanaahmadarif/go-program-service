@@ -1291,6 +1291,33 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
 
 const VOLUME_FORM_TYPE_BY_USER_TYPE = { T1: 9, T2: 5 } as const;
 
+type CloseDealVolumeChampionRow = {
+  user_id: number;
+  username: string;
+  fullname: string;
+  email: string;
+  total_points: number;
+  total_quantity: number;
+  submission_count: number;
+  category: string;
+  form_type_id: number;
+};
+
+const mapCloseDealVolumeChampion = (row: CloseDealVolumeChampionRow | undefined | null) => {
+  if (!row) return null;
+  return {
+    user_id: Number(row.user_id),
+    username: row.username,
+    fullname: row.fullname,
+    email: row.email,
+    total_points: Number(row.total_points) || 0,
+    /** Volume (sum of product_quantity), aligned with volume leaderboard */
+    approved_submissions_count: String(row.total_quantity ?? 0),
+    category: row.category ?? 'Form Type 5',
+    form_type_id: 5,
+  };
+};
+
 export const getVolumeLeaderboard = async (req: CustomRequest, res: Response) => {
   try {
     const userType = String(req.query.user_type || '').toUpperCase();
@@ -1392,9 +1419,10 @@ export const getVolumeLeaderboard = async (req: CustomRequest, res: Response) =>
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
     const championStartDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const campaign = await Campaign.resolveAt();
 
-    // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 champion in parallel
-    const [quotationForms, formType5Forms, formType5Champion] = await Promise.all([
+    // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 volume champions in parallel
+    const [quotationForms, formType5Forms, formType5VolumeRows] = await Promise.all([
       Form.findAll({
         where: {
           status: 'approved',
@@ -1413,26 +1441,39 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
         include: [{ model: User, attributes: ['user_id', 'username', 'fullname', 'email', 'total_points'] }],
         order: [['createdAt', 'DESC']]
       }),
-      sequelize.query(`
-      SELECT 
+      sequelize.query<CloseDealVolumeChampionRow>(`
+      SELECT
         u.user_id,
         u.username,
         u.fullname,
         u.email,
         u.total_points,
-        COUNT(f.form_id) as approved_submissions_count,
-        'Form Type 5' as category,
-        5 as form_type_id
-      FROM users u
-      INNER JOIN forms f ON u.user_id = f.user_id
-      INNER JOIN form_types ft ON f.form_type_id = ft.form_type_id
-      WHERE f.status = 'approved' 
+        SUM(f.product_quantity)::int AS total_quantity,
+        COUNT(f.form_id)::int AS submission_count,
+        'Form Type 5' AS category,
+        5 AS form_type_id
+      FROM forms f
+      INNER JOIN users u ON u.user_id = f.user_id
+      WHERE f.status = 'approved'
         AND f.form_type_id = 5
-        AND f.created_at >= :championStart
+        AND f.created_at >= :startsAt
+        AND (:endsAt IS NULL OR f.created_at < :endsAt)
+        AND u.user_type = 'T2'
+        AND u.level = 'CUSTOMER'
+        AND u.is_active = true
+        AND f.user_id NOT IN (:excludedIds)
       GROUP BY u.user_id, u.username, u.fullname, u.email, u.total_points
-      ORDER BY approved_submissions_count DESC, u.total_points DESC
+      HAVING SUM(f.product_quantity) > 0
+      ORDER BY total_quantity DESC, u.total_points DESC
       LIMIT 2
-    `, { type: QueryTypes.SELECT, replacements: { championStart: championStartDate } })
+    `, {
+        type: QueryTypes.SELECT,
+        replacements: {
+          startsAt: campaign.starts_at,
+          endsAt: campaign.ends_at ?? null,
+          excludedIds: LEADERBOARD_EXCLUDED_USER_IDS,
+        },
+      })
     ]);
 
     // Process quotation forms to count TKDN and Aura Edition submissions per user
@@ -1550,8 +1591,8 @@ export const getChampions = async (req: CustomRequest, res: Response) => {
     const champions = {
       tkdn_champion: tkdnChampion,
       aura_champion: auraChampion,
-      close_deal_champion: formType5Champion[0] || null,
-      close_deal_runner_up: formType5Champion[1] || null,
+      close_deal_champion: mapCloseDealVolumeChampion(formType5VolumeRows[0]),
+      close_deal_runner_up: mapCloseDealVolumeChampion(formType5VolumeRows[1]),
       close_deal_new_customer_champion: closeDealNewCustomerChampion
     };
 
