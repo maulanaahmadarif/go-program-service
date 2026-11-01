@@ -13,7 +13,7 @@ function dailyCheckinProgramEnd() {
   if (process.env.DAILY_CHECKIN_PROGRAM_END) {
     return dayjs.tz(process.env.DAILY_CHECKIN_PROGRAM_END, tz).endOf('day');
   }
-  return dayjs.tz('2026-06-07', tz).endOf('day');
+  return dayjs.tz('2026-12-20', tz).endOf('day');
 }
 
 export function isDailyCheckinProgramOpen(now: Date = new Date()): boolean {

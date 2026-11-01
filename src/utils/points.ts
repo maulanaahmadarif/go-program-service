@@ -20,31 +20,47 @@ const BONUS_POINTS_BY_FORM_TYPE: Record<number, Record<QuantityTier, number>> = 
   10: { '11-50': 40, '51-300': 100, '301-500': 400, '>500': 500 },
 };
 
-/** Fill Aura Edition / TKDN multipliers per quantity tier. */
-const AURA_MULTIPLIER_BY_TIER: Record<QuantityTier, number> = {
+/** Fill eligible product multipliers per quantity tier. */
+const PRODUCT_MULTIPLIER_BY_TIER: Record<QuantityTier, number> = {
   '11-50': 3,
   '51-300': 5,
   '301-500': 7,
   '>500': 8,
 };
 
-/** Aura / TKDN multiplier applies only to Partner PO/Invoice and Distributor PO/Invoice. */
-const AURA_TKDN_MULTIPLIER_FORM_TYPES: Record<'T1' | 'T2', ReadonlySet<number>> = {
+/** Multiplier applies only to Partner PO/Invoice and Distributor PO/Invoice. */
+const PRODUCT_MULTIPLIER_FORM_TYPES: Record<'T1' | 'T2', ReadonlySet<number>> = {
   T2: new Set([5, 6]),
   T1: new Set([9, 10]),
 };
 
-function isAuraTkdnMultiplierEligible(formTypeId: number, userType?: string | null): boolean {
+function isProductMultiplierEligible(formTypeId: number, userType?: string | null): boolean {
   if (userType === 'T2' || userType === 'T1') {
-    return AURA_TKDN_MULTIPLIER_FORM_TYPES[userType].has(formTypeId);
+    return PRODUCT_MULTIPLIER_FORM_TYPES[userType].has(formTypeId);
   }
-  return AURA_TKDN_MULTIPLIER_FORM_TYPES.T2.has(formTypeId) || AURA_TKDN_MULTIPLIER_FORM_TYPES.T1.has(formTypeId);
+  return PRODUCT_MULTIPLIER_FORM_TYPES.T2.has(formTypeId) || PRODUCT_MULTIPLIER_FORM_TYPES.T1.has(formTypeId);
+}
+
+export function hasMultiplierProduct(formData: unknown): boolean {
+  if (!Array.isArray(formData)) return false;
+
+  return formData.some((entry: { label?: string; value?: unknown }) =>
+    entry?.label === 'products' &&
+    Array.isArray(entry.value) &&
+    entry.value.some((product: { productCategory?: string; productType?: string }) =>
+      product && (
+        product.productCategory === 'Aura Edition' ||
+        product.productCategory === 'TKDN Product' ||
+        (product.productCategory === 'Notebook/Laptop' && product.productType === 'ThinkBook 14x')
+      )
+    )
+  );
 }
 
 export const calculateBonusPoints = (
   formTypeId: number,
   product_quantity: number,
-  isAuraEdition: boolean = false,
+  hasEligibleProduct: boolean = false,
   userType?: string | null
 ): number => {
   const tier = getQuantityTier(product_quantity);
@@ -55,8 +71,8 @@ export const calculateBonusPoints = (
 
   let bonus_points = pointsByTier[tier] ?? 0;
 
-  if (isAuraEdition && isAuraTkdnMultiplierEligible(formTypeId, userType)) {
-    bonus_points *= AURA_MULTIPLIER_BY_TIER[tier] ?? 1;
+  if (hasEligibleProduct && isProductMultiplierEligible(formTypeId, userType)) {
+    bonus_points *= PRODUCT_MULTIPLIER_BY_TIER[tier] ?? 1;
   }
 
   return bonus_points;
@@ -98,4 +114,4 @@ export const calculateReferralMilestoneBonus = (referralCount: number): { bonusP
     bonusPoints: 0,
     milestone: null
   };
-}; 
+};

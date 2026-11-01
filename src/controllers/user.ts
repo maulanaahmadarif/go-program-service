@@ -28,6 +28,7 @@ import { UserPhasePoint } from "../../models/UserPhasePoint";
 import { Campaign } from "../../models/Campaign";
 import { getReferralBonusPointsFromSubmissionCount } from "../utils/points";
 import { LEADERBOARD_EXCLUDED_USER_IDS } from "../constants/leaderboard";
+import { PHASE_8_SCORE_START, PHASE_8_SCORE_END_EXCLUSIVE } from "../constants/phaseScoreWindows";
 
 /** One-time points granted when a customer completes self-service registration (`userSignup`). */
 const SIGNUP_WELCOME_POINTS = 400;
@@ -86,11 +87,11 @@ const BLITZ_KICK_OFF_TZ = "Asia/Jakarta";
 const BLITZ_KICK_OFF_PRODUCT_ID = 23;
 const BLITZ_KICK_OFF_NOTE = "Blitz Kick-Off";
 /** Inclusive Blitz Kick-Off day in Jakarta/WIB through local 23:59:59 — [2026-05-27 00:00, 2026-05-28 00:00). */
-const BLITZ_KICK_OFF_START = dayjs.tz("2026-09-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
-const BLITZ_KICK_OFF_END = dayjs.tz("2026-09-02 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_START = dayjs.tz("2026-11-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const BLITZ_KICK_OFF_END = dayjs.tz("2026-12-02 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 /** Approved-form counts: from start of 2026-05-13 in Asia/Jakarta (not UTC midnight on the 13th). */
-const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-09-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
+const APPROVED_FORMS_COUNT_FROM = dayjs.tz("2026-11-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
 
 const isBlitzKickOffWindowOpen = (date = new Date()) => {
 	return date >= BLITZ_KICK_OFF_START && date < BLITZ_KICK_OFF_END;
@@ -454,7 +455,20 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 			}
 		});
 
+		// Phase 7 has a stored earned score. An expiry adjustment removes the old
+		// balance, but must not subtract from earned points on the profile.
+		const phase8Score = await PointTransaction.sum('points', {
+			where: {
+				user_id: user.user_id,
+				transaction_type: 'earn',
+				createdAt: { [Op.gte]: PHASE_8_SCORE_START, [Op.lt]: PHASE_8_SCORE_END_EXCLUSIVE },
+			},
+		});
+
 		const plainUser = user.get({ plain: true }) as any;
+		const phase7Score = Number((plainUser.user_phase_points || []).find(
+			(row: any) => Number(row.campaign?.phase) === 7
+		)?.earned_points) || 0;
 
 		// Build the user profile response
 		const userProfile = {
@@ -467,6 +481,8 @@ export const getUserProfile = async (req: CustomRequest, res: Response) => {
 			job_title: user.job_title ?? null,
 			user_point: user.total_points,
 			accomplishment_total_points: user.accomplishment_total_points,
+			phase7_score: Number(phase7Score) || 0,
+			phase8_score: Number(phase8Score) || 0,
 			company_point: total_company_points || 0,
 			fullname: user.fullname,
 			user_type: user.user_type,
@@ -1558,7 +1574,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 						SELECT COUNT(*)
 						FROM users AS referred
 						WHERE referred.referred_by = "User".user_id
-						AND referred.created_at >= '2026-09-01T00:00:00.000Z'
+						AND referred.created_at >= '2026-11-01T00:00:00.000Z'
 						AND EXISTS (
 							SELECT 1 
 							FROM forms 
@@ -1577,7 +1593,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-09-01T00:00:00.000Z'
+				AND referred.created_at >= '2026-11-01T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1588,7 +1604,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 				SELECT COUNT(*)
 				FROM users AS referred
 				WHERE referred.referred_by = "User".user_id
-				AND referred.created_at >= '2026-09-01T00:00:00.000Z'
+				AND referred.created_at >= '2026-11-01T00:00:00.000Z'
 				AND EXISTS (
 					SELECT 1 
 					FROM forms 
@@ -1633,7 +1649,7 @@ export const getReferralCodeUsers = async (req: CustomRequest, res: Response) =>
 							SELECT 1
 							FROM users referred
 							WHERE referred.referred_by = u.user_id
-							AND referred.created_at >= '2026-09-01T00:00:00.000Z'
+							AND referred.created_at >= '2026-11-01T00:00:00.000Z'
 							AND EXISTS (
 								SELECT 1 
 								FROM forms 

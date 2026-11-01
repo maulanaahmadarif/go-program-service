@@ -1,4 +1,6 @@
 /** Canonical campaign windows in Asia/Jakarta. `ends_at` is exclusive. */
+export const THINKBOOK_14X_QUOTATION_END_EXCLUSIVE = new Date('2026-12-21T00:00:00+07:00');
+
 export const CAMPAIGN_SEED: Array<{
   phase: number;
   name: string;
@@ -11,5 +13,7 @@ export const CAMPAIGN_SEED: Array<{
   { phase: 4, name: 'Phase 4', starts_at: new Date('2025-08-20T00:00:00+07:00'), ends_at: new Date('2025-10-27T00:00:00+07:00') },
   { phase: 5, name: 'Phase 5', starts_at: new Date('2025-10-27T00:00:00+07:00'), ends_at: new Date('2026-02-12T00:00:00+07:00') },
   { phase: 6, name: 'Phase 6', starts_at: new Date('2026-02-12T00:00:00+07:00'), ends_at: new Date('2026-05-15T00:00:00+07:00') },
-  { phase: 7, name: 'Phase 7', starts_at: new Date('2026-05-15T00:00:00+07:00'), ends_at: null },
+  { phase: 7, name: 'Phase 7', starts_at: new Date('2026-05-15T00:00:00+07:00'), ends_at: new Date('2026-08-17T00:00:00+07:00') },
+  { phase: 8, name: 'Phase 8', starts_at: new Date('2026-08-17T00:00:00+07:00'), ends_at: new Date('2026-10-02T00:00:00+07:00') },
+  { phase: 9, name: 'Phase 9', starts_at: new Date('2026-11-01T00:00:00+07:00'), ends_at: new Date('2027-01-01T00:00:00+07:00') },
 ];

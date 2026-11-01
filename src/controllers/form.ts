@@ -22,7 +22,7 @@ import { CoinTransaction } from '../../models/CoinTransaction';
 import { sendEmail } from '../services/brevo';
 import { formatJsonToLabelValueString, getUserType } from '../utils';
 import { getProductQuantityFromFormData, resolveProductQuantity } from '../utils/formProductQuantity';
-import { calculateBonusPoints, calculateReferralMilestoneBonus, REFERRAL_FIRST_SUBMISSION_BONUS, REFERRAL_REFERRER_BONUS } from '../utils/points';
+import { calculateBonusPoints, calculateReferralMilestoneBonus, hasMultiplierProduct, REFERRAL_FIRST_SUBMISSION_BONUS, REFERRAL_REFERRER_BONUS } from '../utils/points';
 import { awardPoints } from '../services/userPhasePoints';
 import { PointTransaction } from '../../models/PointTransaction';
 import { UserMysteryBox } from '../../models/UserMysteryBox';
@@ -36,6 +36,7 @@ import { isDailyCheckinProgramOpen } from '../services/dailyCheckinWindow';
 import { getMilestoneBonusCoinsForDay, mergeMilestoneBonusClaimedDay, normalizeMilestoneBonusClaimedDays, milestoneBonusEarnedTodayWhere } from '../services/dailyCheckinRewards';
 import { Campaign } from '../../models/Campaign';
 import { LEADERBOARD_EXCLUDED_USER_IDS } from '../constants/leaderboard';
+import { THINKBOOK_14X_QUOTATION_END_EXCLUSIVE } from '../constants/campaigns';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -53,6 +54,21 @@ const tkdnAuraProductCategoryFilter = sequelize.literal(
   `(form_data @> '[{"label": "products", "value": [{"productCategory": "Aura Edition"}]}]' OR ` +
   `form_data @> '[{"label": "products", "value": [{"productCategory": "TKDN Product"}]}]')`
 );
+
+const thinkbook14xProductFilter = sequelize.literal(
+  `form_data @> '[{"label": "products", "value": [{"productCategory": "Notebook/Laptop", "productType": "ThinkBook 14x"}]}]'`
+);
+
+const quotationMasteryBranches = (startDate: Date, endDate: Date) => [
+  {
+    createdAt: { [Op.gte]: startDate, [Op.lte]: endDate },
+    [Op.and]: [tkdnAuraProductCategoryFilter],
+  },
+  {
+    createdAt: { [Op.lt]: THINKBOOK_14X_QUOTATION_END_EXCLUSIVE },
+    [Op.and]: [thinkbook14xProductFilter],
+  },
+];
 
 export const approveSubmission = async (req: CustomRequest, res: Response) => {
   const form_id = Number(req.params.form_id);
@@ -359,7 +375,7 @@ export const formSubmission = async (req: CustomRequest, res: Response) => {
 
     // Legacy rule: 4 submitted/approved forms completes project through EOD 2026-06-20 in REDEMPTION_TIMEZONE (default Asia/Jakarta)
     const nowInTz = dayjs().tz(REDEMPTION_TIMEZONE);
-    const legacyFourFormRuleEndsExclusive = dayjs.tz('2026-09-21 00:00:00', REDEMPTION_TIMEZONE);
+    const legacyFourFormRuleEndsExclusive = dayjs.tz('2026-12-31 00:00:00', REDEMPTION_TIMEZONE);
     if (nowInTz.isBefore(legacyFourFormRuleEndsExclusive)) {
       if (formsCount === 4) {
         isProjectFormCompleted = true;
@@ -602,15 +618,7 @@ const calculateSubmissionPoints = (formItem: any, completionBonusFormIds: Set<nu
     base_points = formItem.form_type.point_reward;
 
     const product_quantity = resolveProductQuantity(formItem.product_quantity, formItem.form_data);
-    let isAuraEdition = false;
-    if (Array.isArray(formItem.form_data)) {
-      const productsEntry = formItem.form_data.find((entry: any) => entry.label === 'products');
-      if (productsEntry && Array.isArray(productsEntry.value)) {
-        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) =>
-          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-        );
-      }
-    }
+    const hasEligibleProduct = hasMultiplierProduct(formItem.form_data);
 
     // Completion bonus is awarded once to a specific form.
     if (completionBonusFormIds.has(Number(formItem.form_id))) {
@@ -628,7 +636,7 @@ const calculateSubmissionPoints = (formItem: any, completionBonusFormIds: Set<nu
     bonus_points = calculateBonusPoints(
       formItem.form_type.form_type_id,
       product_quantity,
-      isAuraEdition,
+      hasEligibleProduct,
       formItem.user?.user_type
     );
   }
@@ -857,34 +865,59 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
       whereClause.form_type_id = Number.isNaN(parsedFormTypeId)
         ? form_type_id
         : parsedFormTypeId;
-      const formTypeCreatedFrom = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
-      const formTypeCreatedTo = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
+      const formTypeCreatedFrom = dayjs.tz('2026-11-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
+      const formTypeCreatedTo = dayjs.tz('2026-12-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
       whereClause.createdAt = {
         [Op.gte]: formTypeCreatedFrom,
         [Op.lte]: formTypeCreatedTo,
       };
     }
 
-    // Form type 4 (quotation): same TKDN / Aura filter as getFormTypeUsers (JSONB @> on products)
+    // Keep the TKDN/Aura list scoped to its original campaign window.
     if (formTypeIdNum === 4) {
       whereClause[Op.and] = [tkdnAuraProductCategoryFilter];
     }
 
-    const forms = await Form.findAll({
-      attributes: ['form_id', 'form_data', 'createdAt'],
-      where: whereClause,
-      include: [
-        {
-          model: Project,
-          attributes: ['name']
-        },
-        {
-          model: FormType,
-          attributes: ['form_name']
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
+    const startDate = dayjs.tz('2026-11-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const endDate = dayjs.tz('2026-12-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
+    const [forms, thinkbook14xQuotationCount, quotationMasteryCount] = await Promise.all([
+      Form.findAll({
+        attributes: ['form_id', 'form_data', 'createdAt'],
+        where: whereClause,
+        include: [
+          {
+            model: Project,
+            attributes: ['name']
+          },
+          {
+            model: FormType,
+            attributes: ['form_name']
+          }
+        ],
+        order: [['createdAt', 'DESC']]
+      }),
+      formTypeIdNum === 4
+        ? Form.count({
+            where: {
+              user_id: userId,
+              status: 'approved',
+              form_type_id: 4,
+              createdAt: { [Op.lt]: THINKBOOK_14X_QUOTATION_END_EXCLUSIVE },
+              [Op.and]: [thinkbook14xProductFilter],
+            },
+          })
+        : Promise.resolve(undefined),
+      formTypeIdNum === 4
+        ? Form.count({
+            where: {
+              user_id: userId,
+              status: 'approved',
+              form_type_id: 4,
+              [Op.or]: quotationMasteryBranches(startDate, endDate),
+            },
+          })
+        : Promise.resolve(undefined),
+    ]);
 
     const transformedForms = forms.map(form => {
       const plainForm = form.get({ plain: true }) as any;
@@ -900,7 +933,9 @@ export const getFormSubmissionByUserId = async (req: any, res: Response) => {
     res.status(200).json({ 
       message: 'List of approved user forms', 
       status: res.status, 
-      data: transformedForms
+      data: transformedForms,
+      ...(thinkbook14xQuotationCount !== undefined && { thinkbook_14x_quotation_count: thinkbook14xQuotationCount }),
+      ...(quotationMasteryCount !== undefined && { quotation_mastery_count: quotationMasteryCount }),
     });
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error fetching user forms');
@@ -1147,21 +1182,12 @@ export const getReport = async (req: CustomRequest, res: Response) => {
   const newForm = forms.map((item) => {
     const product_quantity = resolveProductQuantity(item.product_quantity, item.form_data);
 
-    // Check if form contains Aura Edition or TKDN Product
-    let isAuraEdition = false;
-    if (item.form_data && Array.isArray(item.form_data)) {
-      const productsEntry = item.form_data.find((entry: any) => entry.label === 'products');
-      if (productsEntry && Array.isArray(productsEntry.value)) {
-        isAuraEdition = productsEntry.value.some((product: { productCategory?: string }) => 
-          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-        );
-      }
-    }
+    const hasEligibleProduct = hasMultiplierProduct(item.form_data);
 
     const bonus_point = calculateBonusPoints(
       item.form_type.form_type_id,
       product_quantity,
-      isAuraEdition,
+      hasEligibleProduct,
       item.user?.user_type
     );
 
@@ -1209,9 +1235,20 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
       });
     }
 
-    // Date filter: 2026-05-13 start through 2026-06-20 EOD in REDEMPTION_TIMEZONE (default Asia/Jakarta)
-    const startDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
-    const endDate = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
+    // Existing Aura/TKDN campaign window in REDEMPTION_TIMEZONE (default Asia/Jakarta).
+    const startDate = dayjs.tz('2026-11-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const endDate = dayjs.tz('2026-12-20', REDEMPTION_TIMEZONE).endOf('day').toDate();
+    const whereClause: any = form_type_id === 4
+      ? {
+          form_type_id,
+          status: 'approved',
+          [Op.or]: quotationMasteryBranches(startDate, endDate),
+        }
+      : {
+          form_type_id,
+          createdAt: { [Op.gte]: startDate, [Op.lte]: endDate },
+          [Op.and]: [tkdnAuraProductCategoryFilter],
+        };
 
     // First get all users with their form type submission counts using a subquery
     const userSubmissions = await Form.findAll({
@@ -1219,14 +1256,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
         [sequelize.col('Form.user_id'), 'user_id'],
         [sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'submission_count']
       ],
-      where: {
-        form_type_id,
-        createdAt: {
-          [Op.gte]: startDate,
-          [Op.lte]: endDate
-        },
-        [Op.and]: [tkdnAuraProductCategoryFilter]
-      },
+      where: whereClause,
       group: [sequelize.col('Form.user_id'), sequelize.col('user.user_id')],
       order: [[sequelize.fn('COUNT', sequelize.col('Form.form_id')), 'DESC']],
       limit,
@@ -1245,14 +1275,7 @@ export const getFormTypeUsers = async (req: CustomRequest, res: Response) => {
 
     // Get total count for pagination
     const totalCount = await Form.count({
-      where: {
-        form_type_id,
-        createdAt: {
-          [Op.gte]: startDate,
-          [Op.lte]: endDate
-        },
-        [Op.and]: [tkdnAuraProductCategoryFilter]
-      },
+      where: whereClause,
       distinct: true,
       col: 'user_id'
     });
@@ -1420,7 +1443,7 @@ export const getVolumeLeaderboard = async (req: CustomRequest, res: Response) =>
 
 export const getChampions = async (req: CustomRequest, res: Response) => {
   try {
-    const championStartDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
+    const championStartDate = dayjs.tz('2026-11-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
     const campaign = await Campaign.resolveAt();
 
     // Fetch form type 4 (quotation), form type 5 (close deal) forms, and form type 5 volume champions in parallel

@@ -5,7 +5,7 @@ import { Op, Transaction } from 'sequelize';
 
 import { sequelize } from '../db';
 import logger from '../utils/logger';
-import { calculateBonusPoints } from '../utils/points';
+import { calculateBonusPoints, hasMultiplierProduct } from '../utils/points';
 import { resolveProductQuantity } from '../utils/formProductQuantity';
 import { awardPoints } from './userPhasePoints';
 import { enqueueApprovalEmail, enqueueRejectionEmail } from '../queues/emailQueue';
@@ -41,26 +41,21 @@ export interface ApproveFormResult {
 }
 
 /** Form type 4 milestone window in REDEMPTION_TIMEZONE (default Asia/Jakarta): 2026-05-13 start through 2026-06-20 EOD */
-const type4StartDate = dayjs.tz('2026-09-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
+const type4StartDate = dayjs.tz('2026-11-01 00:00:00', REDEMPTION_TIMEZONE).toDate();
 /** Shared campaign end: inclusive through end of 2026-06-20 in Jakarta (completion bonus + type 4 window). */
-const CAMPAIGN_END_JAKARTA = dayjs.tz('2026-09-20', REDEMPTION_TIMEZONE).endOf('day');
+const CAMPAIGN_END_JAKARTA = dayjs.tz('2026-12-20', REDEMPTION_TIMEZONE).endOf('day');
 const type4EndDate = CAMPAIGN_END_JAKARTA.toDate();
 
 const parseFormDataFlags = (formData: unknown) => {
-  let isAuraEdition = false;
   let customerTypeBonus = 0;
   if (Array.isArray(formData)) {
     for (const entry of formData as { label?: string; value?: unknown }[]) {
-      if (entry.label === 'products' && Array.isArray(entry.value)) {
-        isAuraEdition = entry.value.some((product: { productCategory?: string }) =>
-          product.productCategory === 'Aura Edition' || product.productCategory === 'TKDN Product'
-        );
-      } else if (entry.label === 'customerType' && entry.value === 'New User') {
+      if (entry.label === 'customerType' && entry.value === 'New User') {
         customerTypeBonus = 1000;
       }
     }
   }
-  return { isAuraEdition, customerTypeBonus };
+  return { hasEligibleProduct: hasMultiplierProduct(formData), customerTypeBonus };
 };
 
 const COMPLETION_BONUS_POINTS = 200;
@@ -167,7 +162,7 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
         : Promise.resolve(true),
     ]);
 
-    const { isAuraEdition, customerTypeBonus } = parseFormDataFlags(updatedForm.form_data);
+    const { hasEligibleProduct, customerTypeBonus } = parseFormDataFlags(updatedForm.form_data);
     const effectiveProductQuantity = resolveProductQuantity(
       updatedForm.product_quantity,
       updatedForm.form_data
@@ -175,7 +170,7 @@ export const approveFormById = async (formId: number): Promise<ApproveFormResult
     const additionalPoint = calculateBonusPoints(
       updatedForm.form_type_id,
       effectiveProductQuantity,
-      isAuraEdition,
+      hasEligibleProduct,
       user.user_type
     );
     const completionBonus =

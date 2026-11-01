@@ -13,7 +13,7 @@ import { CoinTransaction } from '../../models/CoinTransaction';
 import { CustomRequest, RedeemPointRequest, RedeemPointResponse } from '../types/api';
 import { enqueueRedeemApprovalEmail, enqueueRedeemRejectionEmail } from '../queues/emailQueue';
 import { invalidateCacheByPrefix } from '../middleware/cache';
-import { getRedemptionWindowInfo, isRedemptionWindowOpen } from '../services/redemptionWindow';
+import { getRedemptionWindowInfo } from '../services/redemptionWindow';
 import { getStockAllocationAvailability } from '../services/productStockAllocation';
 import { spendPoints, restoreSpentPoints } from '../services/userPhasePoints';
 import {
@@ -178,14 +178,15 @@ export const redeemPoint = async (req: CustomRequest, res: Response) => {
   const { product_id, shipping_address, fullname, email, phone_number, postal_code, notes }: RedeemPointRequest = req.body;
   const user_id = req.user?.userId as number;
 
-  if (!isRedemptionWindowOpen()) {
-    const info = getRedemptionWindowInfo();
+  const info = getRedemptionWindowInfo();
+  if (!info.is_open) {
     return res.status(400).json({
       message: 'Redemption is not active',
       is_open: false,
       start_at: info.start_at,
       end_at: info.end_at,
       timezone: info.timezone,
+      windows: info.windows,
     });
   }
 
