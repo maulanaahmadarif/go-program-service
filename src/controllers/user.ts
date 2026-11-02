@@ -84,7 +84,7 @@ dayjs.extend(timezone);
 /** Blitz window uses Asia/Jakarta (WIB) wall clock; not tied to REDEMPTION_TIMEZONE env. */
 const BLITZ_KICK_OFF_TZ = "Asia/Jakarta";
 
-const BLITZ_KICK_OFF_PRODUCT_ID = 23;
+const BLITZ_KICK_OFF_PRODUCT_ID = 28;
 const BLITZ_KICK_OFF_NOTE = "Blitz Kick-Off";
 /** Inclusive Blitz Kick-Off day in Jakarta/WIB through local 23:59:59 — [2026-05-27 00:00, 2026-05-28 00:00). */
 const BLITZ_KICK_OFF_START = dayjs.tz("2026-11-01 00:00:00", BLITZ_KICK_OFF_TZ).toDate();
