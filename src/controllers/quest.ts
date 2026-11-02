@@ -14,6 +14,7 @@ import { Redemption } from '../../models/Redemption';
 import { UserAction } from '../../models/UserAction';
 import { PointTransaction } from '../../models/PointTransaction';
 import { ThreeDayQuest } from '../../models/ThreeDayQuest';
+import { Campaign } from '../../models/Campaign';
 import { getStockAllocationAvailability, getProductFlowAvailableStock } from '../services/productStockAllocation';
 import { awardPoints } from '../services/userPhasePoints';
 import { REDEMPTION_TIMEZONE } from '../services/redemptionWindow';
@@ -29,6 +30,18 @@ const QUEST_DURATION_HOURS = 72;
 const QUEST_PRODUCT_ID = 3;
 const QUEST_POINTS_FALLBACK = 3000;
 const QUEST_FLOW_TYPE = 'three_day_quest' as const;
+
+// A new campaign starts a new quest round. Keep prior rounds for reporting and claims history.
+async function currentQuestCampaign(at: Date = new Date(), transaction?: Transaction): Promise<Campaign> {
+  await Campaign.seedIfEmpty(transaction);
+  const campaign = await Campaign.findOne({
+    where: { starts_at: { [Op.lte]: at } },
+    order: [['starts_at', 'DESC']],
+    transaction,
+  });
+  if (!campaign) throw new Error(`No quest campaign has started by ${at.toISOString()}`);
+  return campaign;
+}
 
 function isQuestProgramOpen(at: Date = new Date()): boolean {
   const end = process.env.THREE_DAY_QUEST_END;
@@ -143,7 +156,8 @@ export const getQuestStatus = async (req: CustomRequest, res: Response) => {
     const t2 = await requireT2User(userId);
     if (t2.error) return res.status(t2.error.status).json({ message: t2.error.message });
 
-    const quest = await ThreeDayQuest.findOne({ where: { user_id: userId } });
+    const campaign = await currentQuestCampaign();
+    const quest = await ThreeDayQuest.findOne({ where: { user_id: userId, campaign_id: campaign.campaign_id } });
     const windowForms = quest
       ? await countInWindowForms(userId, quest.started_at, quest.ends_at)
       : { forms: [], approved_count: 0, eligible_count: 0 };
@@ -190,8 +204,10 @@ export const startQuest = async (req: CustomRequest, res: Response) => {
       return res.status(400).json({ message: '3 Day Quest is no longer available' });
     }
 
+    const started_at = new Date();
+    const campaign = await currentQuestCampaign(started_at, transaction);
     const existing = await ThreeDayQuest.findOne({
-      where: { user_id: userId },
+      where: { user_id: userId, campaign_id: campaign.campaign_id },
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
@@ -200,10 +216,9 @@ export const startQuest = async (req: CustomRequest, res: Response) => {
       return res.status(400).json({ message: 'You have already started the 3 Day Quest' });
     }
 
-    const started_at = new Date();
     const ends_at = dayjs(started_at).add(QUEST_DURATION_HOURS, 'hour').toDate();
     const quest = await ThreeDayQuest.create(
-      { user_id: userId, started_at, ends_at },
+      { user_id: userId, campaign_id: campaign.campaign_id, started_at, ends_at },
       { transaction }
     );
 
@@ -235,8 +250,9 @@ export const claimQuestReward = async (req: CustomRequest, res: Response) => {
       return res.status(t2.error.status).json({ message: t2.error.message });
     }
 
+    const campaign = await currentQuestCampaign(new Date(), transaction);
     const quest = await ThreeDayQuest.findOne({
-      where: { user_id: userId },
+      where: { user_id: userId, campaign_id: campaign.campaign_id },
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
@@ -390,6 +406,7 @@ type AdminQuestStatus = 'in_progress' | 'ready_to_claim' | 'claimed' | 'failed';
 type AdminQuestRow = {
   quest_id: number;
   user_id: number;
+  phase: number;
   username: string;
   fullname: string | null;
   email: string;
@@ -423,6 +440,7 @@ const QUEST_LIST_SELECT_SQL = `
   SELECT
     q.quest_id,
     q.user_id,
+    campaign.phase,
     u.username,
     u.fullname,
     u.email,
@@ -442,6 +460,7 @@ const QUEST_LIST_SELECT_SQL = `
       ELSE 'in_progress'
     END AS quest_status
   FROM three_day_quests q
+  INNER JOIN campaigns campaign ON campaign.campaign_id = q.campaign_id
   INNER JOIN users u ON u.user_id = q.user_id
   LEFT JOIN companies c ON c.company_id = u.company_id
   LEFT JOIN LATERAL (
@@ -460,6 +479,7 @@ function mapAdminQuestRow(row: AdminQuestRow) {
   return {
     quest_id: Number(row.quest_id),
     user_id: Number(row.user_id),
+    phase: Number(row.phase),
     username: row.username,
     fullname: row.fullname,
     email: row.email,
@@ -574,6 +594,7 @@ export const downloadQuestList = async (req: CustomRequest, res: Response) => {
     worksheet.columns = [
       { header: 'No', key: 'no', width: 5 },
       { header: 'Username', key: 'username', width: 18 },
+      { header: 'Phase', key: 'phase', width: 12 },
       { header: 'Company', key: 'company', width: 24 },
       { header: 'Fullname', key: 'fullname', width: 22 },
       { header: 'Email', key: 'email', width: 28 },
@@ -590,6 +611,7 @@ export const downloadQuestList = async (req: CustomRequest, res: Response) => {
       worksheet.addRow({
         no: index + 1,
         username: row.username || '-',
+        phase: `Phase ${row.phase}`,
         company: row.company_name || '-',
         fullname: row.fullname || '-',
         email: row.email || '-',

@@ -17,12 +17,14 @@ import { Optional } from 'sequelize';
 
 import { User } from './User';
 import { Redemption } from './Redemption';
+import { Campaign } from './Campaign';
 
 export type ThreeDayQuestRewardType = 'voucher' | 'points';
 
 export interface ThreeDayQuestAttributes {
   quest_id?: number;
   user_id: number;
+  campaign_id: number;
   started_at: Date;
   ends_at: Date;
   claimed_at?: Date | null;
@@ -47,9 +49,15 @@ export class ThreeDayQuest extends Model<ThreeDayQuestAttributes, ThreeDayQuestC
 
   @ForeignKey(() => User)
   @AllowNull(false)
-  @Unique
+  @Unique('three_day_quests_user_campaign_key')
   @Column(DataType.INTEGER)
   public user_id!: number;
+
+  @ForeignKey(() => Campaign)
+  @AllowNull(false)
+  @Unique('three_day_quests_user_campaign_key')
+  @Column(DataType.INTEGER)
+  public campaign_id!: number;
 
   @AllowNull(false)
   @Column(DataType.DATE)
@@ -81,6 +89,9 @@ export class ThreeDayQuest extends Model<ThreeDayQuestAttributes, ThreeDayQuestC
 
   @BelongsTo(() => User, 'user_id')
   user!: User;
+
+  @BelongsTo(() => Campaign, 'campaign_id')
+  campaign!: Campaign;
 
   @BelongsTo(() => Redemption, 'redemption_id')
   redemption?: Redemption;
