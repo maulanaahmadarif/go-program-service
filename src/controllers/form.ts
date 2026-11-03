@@ -681,7 +681,7 @@ const getCompletionBonusFormIds = async (forms: any[]): Promise<Set<number>> => 
 
 export const getFormSubmission = async (req: CustomRequest, res: Response) => {
   try {
-    const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category } = req.query;
+    const { company_id, user_id, start_date, end_date, status, user_type, form_type_id, product_category, product_type } = req.query;
     const productCategory = typeof product_category === 'string' ? product_category : undefined;
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
@@ -693,6 +693,9 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         message: 'Invalid product_category.',
         status: 400
       });
+    }
+    if (product_type && product_type !== 'ThinkBook 14x') {
+      return res.status(400).json({ message: 'Invalid product_type.', status: 400 });
     }
 
     const companyWhere: any = {};
@@ -771,6 +774,9 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         `),
       ];
     }
+    if (product_type === 'ThinkBook 14x') {
+      whereClause[Op.and] = [...(whereClause[Op.and] || []), thinkbook14xProductFilter];
+    }
 
     const { count, rows } = await Form.findAndCountAll({
       include: [
@@ -830,7 +836,8 @@ export const getFormSubmission = async (req: CustomRequest, res: Response) => {
         items_per_page: limit,
         has_next: page < totalPages,
         has_previous: page > 1
-      }
+      },
+      ...(product_type && { applied_product_type: product_type }),
     });
   } catch (error: any) {
     req.log.error({ error, stack: error.stack }, 'Error fetching forms');
@@ -960,6 +967,7 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
       user_type,
       form_type_id,
       product_category,
+      product_type,
     } = req.query;
 
     // Validate product_category query parameter (same as getFormSubmission)
@@ -968,6 +976,9 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
         message: 'Invalid product_category.',
         status: 400
       });
+    }
+    if (product_type && product_type !== 'ThinkBook 14x') {
+      return res.status(400).json({ message: 'Invalid product_type.', status: 400 });
     }
 
     const companyWhere: any = {};
@@ -1030,6 +1041,10 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
       };
     }
 
+    if (product_type === 'ThinkBook 14x') {
+      whereClause[Op.and] = [thinkbook14xProductFilter];
+    }
+
     let forms = await Form.findAll({
       include: [
         {
@@ -1059,7 +1074,7 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
       order: [['createdAt', 'DESC']]
     })
 
-    // Filter by product_category if provided (same logic as getFormSubmission)
+    // Match the list endpoint's product filters before writing the workbook.
     if (product_category) {
       forms = forms.filter((form: any) => {
         const formData = form.form_data;
@@ -1102,6 +1117,12 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
     forms.forEach((item, index) => {
       const points = calculateSubmissionPoints(item, completionBonusFormIds);
       const points_gained = points.total_points;
+      const displayedFormData = product_type === 'ThinkBook 14x' && Array.isArray(item.form_data)
+        ? item.form_data.map((entry: any) => entry?.label === 'products' && Array.isArray(entry.value)
+          ? { ...entry, value: entry.value.filter((product: any) =>
+              product?.productCategory === 'Notebook/Laptop' && product?.productType === 'ThinkBook 14x') }
+          : entry)
+        : item.form_data;
 
       worksheet.addRow({
         no: index + 1,
@@ -1114,12 +1135,14 @@ export const downloadSubmission = async (req: CustomRequest, res: Response) => {
         user_type: getUserType(item.user.user_type),
         project: item.project.name,
         milestone: item.form_type.form_name,
-        product_quantity: resolveProductQuantity(item.product_quantity, item.form_data),
+        product_quantity: product_type === 'ThinkBook 14x'
+          ? getProductQuantityFromFormData(displayedFormData)
+          : resolveProductQuantity(item.product_quantity, item.form_data),
         created_at: formatSubmissionAt(item.createdAt),
         status: item.status,
         note: item.note || '-',
         points_gained: points_gained,
-        form_data: formatJsonToLabelValueString(item.form_data as any),
+        form_data: formatJsonToLabelValueString(displayedFormData as any),
       });
     });
 
