@@ -428,12 +428,19 @@ const ADMIN_QUEST_STATUSES: AdminQuestStatus[] = [
   'claimed',
   'failed',
 ];
+const ADMIN_QUEST_PHASES = [8, 9];
 
 function parseAdminQuestStatus(value: unknown): AdminQuestStatus | null {
   if (typeof value !== 'string' || !value) return null;
   return ADMIN_QUEST_STATUSES.includes(value as AdminQuestStatus)
     ? (value as AdminQuestStatus)
     : null;
+}
+
+function parseAdminQuestPhase(value: unknown): number | null {
+  if (value === undefined || value === '') return null;
+  const phase = Number(value);
+  return typeof value === 'string' && ADMIN_QUEST_PHASES.includes(phase) ? phase : null;
 }
 
 const QUEST_LIST_SELECT_SQL = `
@@ -500,6 +507,7 @@ function mapAdminQuestRow(row: AdminQuestRow) {
 async function queryAdminQuestRows(args: {
   status: AdminQuestStatus | null;
   usernameLike: string | null;
+  phase: number | null;
   limit?: number;
   offset?: number;
 }) {
@@ -508,11 +516,13 @@ async function queryAdminQuestRows(args: {
     requiredCount: QUEST_REQUIRED_POS,
     status: args.status,
     usernameLike: args.usernameLike,
+    phase: args.phase,
   };
 
   const filterSql = `
     WHERE (:status IS NULL OR rows.quest_status = :status)
       AND (:usernameLike IS NULL OR rows.username ILIKE :usernameLike)
+      AND (:phase IS NULL OR rows.phase = :phase)
   `;
 
   const countRows = await sequelize.query<{ total: number }>(
@@ -549,10 +559,15 @@ export const getQuestList = async (req: CustomRequest, res: Response) => {
     }
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     const usernameLike = username ? `%${username}%` : null;
+    const phase = parseAdminQuestPhase(req.query.phase);
+    if (req.query.phase !== undefined && phase === null) {
+      return res.status(400).json({ message: 'phase must be 8 or 9' });
+    }
 
     const { total, rows } = await queryAdminQuestRows({
       status,
       usernameLike,
+      phase,
       limit,
       offset,
     });
@@ -586,8 +601,12 @@ export const downloadQuestList = async (req: CustomRequest, res: Response) => {
     }
     const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
     const usernameLike = username ? `%${username}%` : null;
+    const phase = parseAdminQuestPhase(req.query.phase);
+    if (req.query.phase !== undefined && phase === null) {
+      return res.status(400).json({ message: 'phase must be 8 or 9' });
+    }
 
-    const { rows } = await queryAdminQuestRows({ status, usernameLike });
+    const { rows } = await queryAdminQuestRows({ status, usernameLike, phase });
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('three_day_quests');
