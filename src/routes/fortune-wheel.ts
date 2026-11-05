@@ -8,8 +8,8 @@ const router = express.Router();
 
 router.get('/check-eligibility', authenticate, checkEligibility);
 router.get('/config', authenticate, getFortuneWheelConfig);
-router.post('/spin', authenticate, checkDomain, spinWheel);
-router.post('/claim', authenticate, checkDomain, claimFortuneWheelPrize);
+router.post('/spin', authenticate, spinWheel);
+router.post('/claim', authenticate, claimFortuneWheelPrize);
 router.get('/list', authenticate, cacheGet({ keyPrefix: 'cache:fortune-wheel:list', ttlSeconds: 30, includeUser: true }), getFortuneWheelList);
 router.get('/list/download', authenticate, downloadFortuneWheelList);
 
