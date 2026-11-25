@@ -7,10 +7,10 @@ dayjs.extend(timezone);
 
 export const REDEMPTION_TIMEZONE = process.env.REDEMPTION_TIMEZONE || 'Asia/Jakarta';
 
-// Dates are inclusive in the configured timezone.
+// The first window closes at its specified time; the second includes its final day.
 const REDEMPTION_DATES = [
-  { start: '2026-11-27', end: '2026-11-30' },
-  { start: '2026-12-28', end: '2026-12-31' },
+  { start: '2026-11-27', end: '2026-11-29 07:00:00', endInclusive: false },
+  { start: '2026-12-28', end: '2026-12-31', endInclusive: true },
 ] as const;
 
 export type RedemptionWindow = {
@@ -28,12 +28,16 @@ export type RedemptionWindowInfo = RedemptionWindow & {
 export function getRedemptionWindowInfo(at: Date = new Date()): RedemptionWindowInfo {
   const tz = REDEMPTION_TIMEZONE;
   const now = dayjs(at).tz(tz);
-  const windows = REDEMPTION_DATES.map(({ start, end }) => ({
+  const windows = REDEMPTION_DATES.map(({ start, end, endInclusive }) => ({
     start: dayjs.tz(start, tz).startOf('day'),
-    end: dayjs.tz(end, tz).endOf('day'),
+    end: endInclusive ? dayjs.tz(end, tz).endOf('day') : dayjs.tz(end, tz),
+    endInclusive,
   }));
 
-  const active = windows.find((window) => !now.isBefore(window.start) && !now.isAfter(window.end));
+  const active = windows.find((window) =>
+    !now.isBefore(window.start) &&
+    (window.endInclusive ? !now.isAfter(window.end) : now.isBefore(window.end))
+  );
   const currentOrNext = active ?? windows.find((window) => now.isBefore(window.start)) ?? windows[windows.length - 1];
 
   return {

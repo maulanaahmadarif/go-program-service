@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 
 const { getRedemptionWindowInfo } = require('../dist/src/services/redemptionWindow');
 
-test('redemption opens on both inclusive Jakarta date ranges and closes between them', () => {
+test('redemption opens and closes at the configured Jakarta boundaries', () => {
   const cases = [
     ['2026-11-26T16:59:59.999Z', false],
     ['2026-11-26T17:00:00.000Z', true],
-    ['2026-11-30T16:59:59.999Z', true],
-    ['2026-11-30T17:00:00.000Z', false],
+    ['2026-11-28T23:59:59.999Z', true],
+    ['2026-11-29T00:00:00.000Z', false],
     ['2026-12-27T16:59:59.999Z', false],
     ['2026-12-27T17:00:00.000Z', true],
     ['2026-12-31T16:59:59.999Z', true],
@@ -29,6 +29,10 @@ test('status exposes both windows and selects the active or upcoming one', () =>
   assert.deepEqual(before.windows.map((window) => window.start_at), [
     '2026-11-27T00:00:00+07:00',
     '2026-12-28T00:00:00+07:00',
+  ]);
+  assert.deepEqual(before.windows.map((window) => window.end_at), [
+    '2026-11-29T07:00:00+07:00',
+    '2026-12-31T23:59:59+07:00',
   ]);
   assert.equal(before.start_at, before.windows[0].start_at);
   assert.equal(between.start_at, before.windows[1].start_at);
